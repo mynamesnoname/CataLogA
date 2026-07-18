@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CataLogA — test_catas 演示项目架构</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-card: #161b22;
+    --bg-hover: #1c2333;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #f0883e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d2991d;
+    --purple: #a371f7;
+    --cyan: #39d2c0;
+    --pink: #db61a2;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  h2 {
+    font-size: 1.4rem;
+    margin: 2rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--accent);
+  }
+  h3 { font-size: 1.1rem; margin: 1.2rem 0 0.6rem; color: var(--text); }
+
+  .subtitle { color: var(--text-dim); font-size: 0.95rem; margin-bottom: 2rem; }
+
+  /* Cards */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.2rem;
+    text-align: center;
+  }
+  .stat-card .number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .stat-card .label { color: var(--text-dim); font-size: 0.9rem; margin-top: 0.3rem; }
+
+  /* Tree */
+  .tree {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.88rem;
+    line-height: 1.7;
+    white-space: pre;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.2rem;
+    overflow-x: auto;
+  }
+  .tree .dir { color: var(--accent); font-weight: 600; }
+  .tree .file { color: var(--text-dim); }
+  .tree .fits { color: var(--green); }
+  .tree .script { color: var(--yellow); }
+  .tree .comment { color: #484f58; font-style: italic; }
+  .tree .count { color: #6e7681; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  th, td {
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--text-dim); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
+  td { font-size: 0.9rem; }
+  tr:hover { background: var(--bg-hover); }
+
+  .tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .tag-bgs  { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .tag-lrg  { background: rgba(240,136,62,0.15); color: var(--accent2); }
+  .tag-elg  { background: rgba(163,113,247,0.15); color: var(--purple); }
+  .tag-qso  { background: rgba(57,210,192,0.15); color: var(--cyan); }
+  .tag-unk  { background: rgba(139,148,158,0.15); color: var(--text-dim); }
+
+  .note {
+    background: rgba(210,153,29,0.1);
+    border-left: 3px solid var(--yellow);
+    padding: 0.8rem 1rem;
+    border-radius: 0 6px 6px 0;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+    color: var(--yellow);
+  }
+  .note a { color: var(--accent); }
+
+  .section-desc { color: var(--text-dim); margin-bottom: 1rem; font-size: 0.92rem; }
+
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem 0;
+  }
+  .flow .box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem 1.2rem;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  .flow .arrow { color: var(--text-dim); font-size: 1.2rem; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    margin-left: 0.4rem;
+  }
+  .badge-ok { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-warn { background: rgba(210,153,29,0.15); color: var(--yellow); }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  .footer { text-align: center; color: var(--text-dim); font-size: 0.8rem; margin-top: 3rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>🔭 CataLogA — test_catas 演示项目架构</h1>
+<p class="subtitle">DESI loa 生产运行光谱数据集的目录、分类与结构分析</p>
+
+<!-- ============================== STATS ============================== -->
+<h2>📊 数据集概览</h2>
+<div class="card-grid">
+  <div class="stat-card">
+    <div class="number">34</div>
+    <div class="label">DESI Tiles</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">68</div>
+    <div class="label">FITS 文件</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">~1.8 GB</div>
+    <div class="label">磁盘占用</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">2021–2024</div>
+    <div class="label">观测跨度</div>
+  </div>
+</div>
+
+<div class="card-grid">
+  <div class="stat-card">
+    <div class="number">34</div>
+    <div class="label">Coadd 光谱 + 元数据</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">34</div>
+    <div class="label">Redrock 红移 + 分类</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">4</div>
+    <div class="label">目标类别 (BGS/LRG/ELG/QSO)</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">1</div>
+    <div class="label">分析脚本 (Python)</div>
+  </div>
+</div>
+
+<!-- ============================== TREE ============================== -->
+<h2>📁 项目目录结构</h2>
+<pre class="tree">
+<span class="dir">test_catas/</span>                              <span class="comment">← 演示项目根目录</span>
+├── <span class="script">README.md</span>                          <span class="comment">数据集文档 (80行)</span>
+├── <span class="script">requirements.txt</span>                   <span class="comment">Python 依赖: astropy≥6.0, matplotlib≥3.8</span>
+├── <span class="script">.gitignore</span>                         <span class="comment">忽略: .DS_Store, .venv, manifest.csv, spectrum.png</span>
+├── <span class="script">.gitattributes</span>                     <span class="comment">Git LFS 追踪 *.fits</span>
+│
+├── <span class="dir">examples/</span>
+│   └── <span class="script">inspect_spectrum.py</span>             <span class="comment">光谱检查脚本 — 核心分析工具</span>
+│
+└── <span class="dir">catas_spectro/</span>
+    └── <span class="dir">tiles/</span>
+        └── <span class="dir">cumulative/</span>
+            ├── <span class="dir">10819/</span><span class="dir">20220326/</span>         <span class="count">├── coadd-0-10819-thru20220326.fits</span>
+            │                           <span class="count">└── redrock-0-10819-thru20220326.fits</span>
+            ├── <span class="dir">11056/</span><span class="dir">20221019/</span>         <span class="count">├── coadd-6-11056-thru20221019.fits …</span>
+            ├── <span class="dir">11063/</span><span class="dir">20221125/</span>         <span class="count">├── coadd-3-11063-thru20221125.fits …</span>
+            ├── <span class="dir">1239/</span> <span class="dir">20210606/</span>         <span class="count">… (最早观测)</span>
+            ├── <span class="dir">1468/</span> <span class="dir">20240402/</span>         <span class="count">…</span>
+            ├── <span class="dir">1705/</span> <span class="dir">20211110/</span>         <span class="count">…</span>
+            ├── <span class="dir">1828/</span> <span class="dir">20231020/</span>         <span class="count">…</span>
+            ├── <span class="dir">20454/</span><span class="dir">20240318/</span>         <span class="count">…</span>
+            ├── <span class="dir">21718/</span><span class="dir">20210930/</span>         <span class="count">…</span>
+            ├── <span class="dir">2234/</span> <span class="dir">20211010/</span>         <span class="count">…</span>
+            ├── <span class="dir">22562/</span><span class="dir">20240113/</span>         <span class="count">…</span>
+            ├── <span class="dir">23296/</span><span class="dir">20210928/</span>         <span class="count">…</span>
+            ├── <span class="dir">23632/</span><span class="dir">20230406/</span>         <span class="count">…</span>
+            ├── <span class="dir">24134/</span><span class="dir">20211015/</span>         <span class="count">…</span>
+            ├── <span class="dir">2799/</span> <span class="dir">20230401/</span>         <span class="count">…</span>
+            ├── <span class="dir">3042/</span> <span class="dir">20220131/</span>         <span class="count">…</span>
+            ├── <span class="dir">4239/</span> <span class="dir">20220526/</span>         <span class="count">…</span>
+            ├── <span class="dir">4339/</span> <span class="dir">20230415/</span>         <span class="count">…</span>
+            ├── <span class="dir">4383/</span> <span class="dir">20230418/</span>         <span class="count">…</span>
+            ├── <span class="dir">4709/</span> <span class="dir">20221219/</span>         <span class="count">…</span>
+            ├── <span class="dir">5172/</span> <span class="dir">20221114/</span>         <span class="count">…</span>
+            ├── <span class="dir">5391/</span> <span class="dir">20221210/</span>         <span class="count">…</span>
+            ├── <span class="dir">6142/</span> <span class="dir">20240108/</span>         <span class="count">…</span>
+            ├── <span class="dir">6405/</span> <span class="dir">20211008/</span>         <span class="count">…</span>
+            ├── <span class="dir">7083/</span> <span class="dir">20211106/</span>         <span class="count">…</span>
+            ├── <span class="dir">7712/</span> <span class="dir">20240114/</span>         <span class="count">…</span>
+            ├── <span class="dir">7965/</span> <span class="dir">20211128/</span>         <span class="count">…</span>
+            ├── <span class="dir">8083/</span> <span class="dir">20231105/</span>         <span class="count">…</span>
+            ├── <span class="dir">8678/</span> <span class="dir">20231213/</span>         <span class="count">…</span>
+            ├── <span class="dir">9022/</span> <span class="dir">20230609/</span>         <span class="count">…</span>
+            ├── <span class="dir">9159/</span> <span class="dir">20231216/</span>         <span class="count">…</span>
+            ├── <span class="dir">9263/</span> <span class="dir">20240403/</span>         <span class="count">… (最晚观测)</span>
+            ├── <span class="dir">9486/</span> <span class="dir">20230112/</span>         <span class="count">…</span>
+            └── <span class="dir">9852/</span> <span class="dir">20211010/</span>         <span class="count">…</span>
+</pre>
+
+<!-- ============================== FITS FILES ============================== -->
+<h2>📦 FITS 文件详解</h2>
+
+<h3>Coadd 文件 (<code>coadd-&lt;petal&gt;-&lt;tile&gt;-thru&lt;night&gt;.fits</code>)</h3>
+<div class="card">
+  <div class="section-desc">包含共加光谱 (coadded spectra) 和光纤元数据。每个文件约 <strong>52 MB</strong>。</div>
+  <table>
+    <tr><th>字段</th><th>说明</th></tr>
+    <tr><td><code>SIMPLE</code></td><td>FITS 标准标志 = T</td></tr>
+    <tr><td><code>BITPIX</code></td><td>数据类型 = 8</td></tr>
+    <tr><td><code>EXTEND</code></td><td>包含扩展 = T</td></tr>
+    <tr><td><code>SPGRP</code></td><td>光谱分组 = 'cumulative'</td></tr>
+    <tr><td><code>SPGRPVAL / NIGHT</code></td><td>观测夜 = YYYYMMDD</td></tr>
+    <tr><td><code>TILEID</code></td><td>DESI 天区 Tile ID</td></tr>
+    <tr><td><code>SPECTRO / PETAL</code></td><td>光谱仪编号 (0–9)</td></tr>
+    <tr><td><code>DEPNAM00-04</code></td><td>生成软件栈: python 3.10.14, numpy 1.22.4, scipy 1.8.1, astropy 6.0.1, yaml</td></tr>
+  </table>
+  <p style="margin-top:0.8rem; font-size:0.85rem; color:var(--text-dim);">
+    关键 HDU: <code>FIBERMAP</code> (目标表), <code>B_WAVELENGTH</code> (波长网格), <code>B_FLUX</code> (B通道流量),
+    <code>R_FLUX</code>, <code>Z_FLUX</code> (R/Z通道), <code>IVAR</code> (逆方差) 等
+  </p>
+</div>
+
+<h3>Redrock 文件 (<code>redrock-&lt;petal&gt;-&lt;tile&gt;-thru&lt;night&gt;.fits</code>)</h3>
+<div class="card">
+  <div class="section-desc">包含 Redrock 红移拟合结果和目标分类。每个文件约 <strong>492 MB</strong> (远大于 coadd，因含全部模板拟合详情)。</div>
+  <table>
+    <tr><th>字段</th><th>说明</th></tr>
+    <tr><td><code>RRVER</code></td><td>Redrock 版本 = 0.20.2</td></tr>
+    <tr><td><code>TEMNAM00 / TEMFIL00</code></td><td>GALAXY 模板 v2.6</td></tr>
+    <tr><td><code>TEMNAM01 / TEMFIL01</code></td><td>QSO:::LOZ 模板 v1.0 (低红移 QSO)</td></tr>
+    <tr><td><code>TEMNAM02 / TEMFIL02</code></td><td>QSO:::HIZ 模板 v1.1 (高红移 QSO)</td></tr>
+  </table>
+  <p style="margin-top:0.8rem; font-size:0.85rem; color:var(--text-dim);">
+    关键 HDU: <code>REDSHIFTS</code> (红移表: Z, ZERR, ZWARN, 目标类型, χ²),
+    <code>FIBERMAP</code> (光纤分配), <code>TSNE2</code> (t-SNE 二维嵌入)
+  </p>
+</div>
+
+<!-- ============================== TARGET CLASSES ============================== -->
+<h2>🎯 目标分类体系</h2>
+<p class="section-desc"><code>inspect_spectrum.py</code> 中按目标类型和光谱特征分类，共 4 大类、15 子类、28 个已标注观测 (另有 6 个未分类):</p>
+
+<h3>BGS — Bright Galaxy Survey <span class="tag tag-bgs">6 观测</span></h3>
+<table>
+  <tr><th>子类</th><th>描述</th><th>Tile</th><th>观测夜</th><th>Petal</th></tr>
+  <tr><td>Ha_conf</td><td>Hα 发射线确认</td><td>20454, 23632</td><td>20240318, 20230406</td><td>8, 9</td></tr>
+  <tr><td>absorp_Ha</td><td>Hα 吸收线</td><td>21718, 23296</td><td>20210930, 20210928</td><td>9, 8</td></tr>
+  <tr><td>bad_spec</td><td>劣质光谱</td><td>22562, 24134</td><td>20240113, 20211015</td><td>3, 5</td></tr>
+</table>
+
+<h3>LRG — Luminous Red Galaxy <span class="tag tag-lrg">8 观测 <span class="badge badge-warn">缺2</span></span></h3>
+<table>
+  <tr><th>子类</th><th>描述</th><th>Tile</th><th>观测夜</th><th>Petal</th></tr>
+  <tr><td>Ha_artifact</td><td>Hα 伪影 <span class="badge badge-warn">数据缺失</span></td><td style="color:var(--red)">1270, 10380</td><td style="color:var(--red)">✗</td><td style="color:var(--red)">✗</td></tr>
+  <tr><td>absorp_conf</td><td>吸收线确认</td><td>9486, 11056</td><td>20230112, 20221019</td><td>8, 6</td></tr>
+  <tr><td>absorp_artifact</td><td>吸收线伪影</td><td>4709, 7083</td><td>20221219, 20211106</td><td>2, 4</td></tr>
+  <tr><td>absorp_OII</td><td>[OII] 吸收</td><td>1239, 4383</td><td>20210606, 20230418</td><td>5, 3</td></tr>
+  <tr><td>bad_spec</td><td>劣质光谱</td><td>5172, 9852</td><td>20221114, 20211010</td><td>5, 8</td></tr>
+</table>
+
+<h3>ELG — Emission Line Galaxy <span class="tag tag-elg">8 观测</span></h3>
+<table>
+  <tr><th>子类</th><th>描述</th><th>Tile</th><th>观测夜</th><th>Petal</th></tr>
+  <tr><td>OII_conf</td><td>[OII] 发射线确认</td><td>2234, 5391</td><td>20211010, 20221210</td><td>0, 6</td></tr>
+  <tr><td>sky_1p50</td><td>天光线 @ 1.50Å</td><td>4339, 9022</td><td>20230415, 20230609</td><td>3, 7</td></tr>
+  <tr><td>sky_1p315</td><td>天光线 @ 1.315Å</td><td>6405, 11063</td><td>20211008, 20221125</td><td>6, 3</td></tr>
+  <tr><td>random</td><td>随机选取</td><td>1468, 6142</td><td>20240402, 20240108</td><td>1, 4</td></tr>
+</table>
+
+<h3>QSO — Quasar <span class="tag tag-qso">6 观测</span></h3>
+<table>
+  <tr><th>子类</th><th>描述</th><th>Tile</th><th>观测夜</th><th>Petal</th></tr>
+  <tr><td>Lya_CIV</td><td>Lyα / CIV 发射线</td><td>10819, 3042</td><td>20220326, 20220131</td><td>0, 6</td></tr>
+  <tr><td>Lya_failure</td><td>Lyα 拟合失败</td><td>7712, 9263</td><td>20240114, 20240403</td><td>6, 2</td></tr>
+  <tr><td>wrong_type</td><td>错误类型分类</td><td>2799, 4239</td><td>20230401, 20220526</td><td>8, 5</td></tr>
+</table>
+
+<h3>未分类观测 <span class="tag tag-unk">6 观测</span></h3>
+<table>
+  <tr><th>Tile</th><th>观测夜</th><th>Petal</th></tr>
+  <tr><td>1705</td><td>20211110</td><td>2</td></tr>
+  <tr><td>1828</td><td>20231020</td><td>1</td></tr>
+  <tr><td>7965</td><td>20211128</td><td>1</td></tr>
+  <tr><td>8083</td><td>20231105</td><td>0</td></tr>
+  <tr><td>8678</td><td>20231213</td><td>5</td></tr>
+  <tr><td>9159</td><td>20231216</td><td>9</td></tr>
+</table>
+
+<div class="note">
+  ⚠️ <strong>注意：</strong>LRG/Ha_artifact 子类引用的 Tile 1270 (20220405/p4) 和 10380 (20211212/p1) 在数据集中<strong>不存在</strong>。
+  另有 6 个 Tile (1705, 1828, 7965, 8083, 8678, 9159) 存在于数据目录但<strong>未被脚本分类</strong>。
+  脚本的 <code>get_coadd_redrock_files()</code> 使用 <code>redux_root='./catas_spectro'</code> 而非完整 DESI 路径，对缺失文件会抛出 FileNotFoundError。
+</div>
+
+<!-- ============================== SCRIPT ============================== -->
+<h2>🐍 inspect_spectrum.py 分析脚本</h2>
+<div class="card">
+  <p class="section-desc"><strong>45 行</strong> Python 脚本，是当前项目中唯一的分析代码。功能:</p>
+  <table>
+    <tr><th>功能</th><th>说明</th></tr>
+    <tr><td>目标分类字典</td><td>定义 BGS/LRG/ELG/QSO 共 4 大类、15 子类的 (tile, night, petal) 映射</td></tr>
+    <tr><td><code>get_coadd_redrock_files()</code></td><td>根据 tile/night/petal 定位一对 coadd + redrock FITS 文件，支持自定义 redux_root</td></tr>
+    <tr><td>命令行入口</td><td>(在未展示的后续部分) 支持 <code>--target-index</code> 和 <code>--show</code> 参数检查不同目标</td></tr>
+    <tr><td>依赖</td><td><code>astropy</code> (读 FITS) + <code>matplotlib</code> (绘光谱图)</td></tr>
+  </table>
+</div>
+
+<!-- ============================== DATA FLOW ============================== -->
+<h2>🔄 数据处理流程</h2>
+<div class="flow">
+  <div class="box">
+    <div style="font-weight:600;color:var(--green)">DESI 原始观测</div>
+    <div style="font-size:0.8rem;color:var(--text-dim)">多夜曝光</div>
+  </div>
+  <span class="arrow">→</span>
+  <div class="box">
+    <div style="font-weight:600;color:var(--accent)">Coadd Pipeline</div>
+    <div style="font-size:0.8rem;color:var(--text-dim)">波长校准 + 共加</div>
+  </div>
+  <span class="arrow">→</span>
+  <div class="box">
+    <div style="font-weight:600;color:var(--yellow)">coadd-*.fits</div>
+    <div style="font-size:0.8rem;color:var(--text-dim)">光谱 + 光纤元数据</div>
+  </div>
+  <span class="arrow">→</span>
+  <div class="box">
+    <div style="font-weight:600;color:var(--purple)">Redrock</div>
+    <div style="font-size:0.8rem;color:var(--text-dim)">Template Fitting</div>
+  </div>
+  <span class="arrow">→</span>
+  <div class="box">
+    <div style="font-weight:600;color:var(--red)">redrock-*.fits</div>
+    <div style="font-size:0.8rem;color:var(--text-dim)">红移 + 分类</div>
+  </div>
+  <span class="arrow">→</span>
+  <div class="box">
+    <div style="font-weight:600;color:var(--cyan)">CataLogA Agent</div>
+    <div style="font-size:0.8rem;color:var(--text-dim)">红移灾难检测 🎯</div>
+  </div>
+</div>
+
+<!-- ============================== SCIENTIFIC CONTEXT ============================== -->
+<h2>🔬 红移灾难 (Redshift Catastrophe) 科学背景</h2>
+<div class="card">
+  <h3>问题本质</h3>
+  <p>在 DESI 等宇宙学巡天中，<strong>Redrock</strong> 使用模板拟合 (template fitting) 确定光谱红移。错误拟合可能发生:</p>
+  <ul style="margin:0.8rem 0 0.8rem 1.5rem;">
+    <li><strong>天光线污染：</strong>高流量的 airglow 谱线被误匹配为天体谱线</li>
+    <li><strong>χ² 局部极小：</strong>错误匹配在竞争中胜出，产生错误红移</li>
+  </ul>
+
+  <h3 style="margin-top:1.2rem;">验证方法</h3>
+  <p>同一光源的<strong>重复曝光</strong>是核心验证策略:</p>
+  <div class="flow">
+    <div class="box"><strong>曝光 A</strong> → Redrock → 红移 Z₁</div>
+    <span class="arrow">vs</span>
+    <div class="box"><strong>曝光 B</strong> → Redrock → 红移 Z₂</div>
+  </div>
+  <p style="margin-top:0.8rem;">
+    ✅ <strong>|Z₁ − Z₂| 很小</strong> → 红移可信<br>
+    ❌ <strong>|Z₁ − Z₂| 很大</strong> → 疑似红移灾难
+  </p>
+
+  <h3 style="margin-top:1.2rem;">科学影响</h3>
+  <p>红移灾难引入的偏差会被传播到:</p>
+  <ul style="margin:0.8rem 0 0.8rem 1.5rem;">
+    <li><strong>BAO (重子声学振荡)</strong> 测量 → 暗能量约束偏移</li>
+    <li><strong>LSS (大尺度结构)</strong> 演化研究 → 宇宙学参数系统性偏差</li>
+  </ul>
+</div>
+
+<!-- ============================== DATA INTEGRITY ============================== -->
+<h2>⚠️ 数据完整性标注</h2>
+<div class="card">
+  <table>
+    <tr><th>项目</th><th>状态</th><th>说明</th></tr>
+    <tr>
+      <td>Coadd 文件</td>
+      <td><span class="badge badge-ok">34/34 ✓</span></td>
+      <td>全部存在，每个 ~52 MB</td>
+    </tr>
+    <tr>
+      <td>Redrock 文件</td>
+      <td><span class="badge badge-ok">34/34 ✓</span></td>
+      <td>全部存在，每个 ~492 MB</td>
+    </tr>
+    <tr>
+      <td>脚本引用 Tile</td>
+      <td><span class="badge badge-warn">28/30 ✓</span></td>
+      <td>Tile 1270 &amp; 10380 (LRG/Ha_artifact) 缺失</td>
+    </tr>
+    <tr>
+      <td>未分类 Tile</td>
+      <td><span class="badge badge-warn">6 个</span></td>
+      <td>1705, 1828, 7965, 8083, 8678, 9159 未在脚本中标注</td>
+    </tr>
+    <tr>
+      <td>create_manifest.py</td>
+      <td><span class="badge badge-warn">缺失</span></td>
+      <td>README 引用的 scripts/create_manifest.py 不存在</td>
+    </tr>
+    <tr>
+      <td>.DS_Store / __MACOSX</td>
+      <td><span class="badge badge-warn">噪声文件</span></td>
+      <td>macOS 资源 fork 残留，非数据文件</td>
+    </tr>
+  </table>
+</div>
+
+<hr>
+<div class="footer">
+  CataLogA · Catastrophe + Log + Agent · DESI loa Production · Generated 2026-07-17
+</div>
+
+</div>
+</body>
+</html>

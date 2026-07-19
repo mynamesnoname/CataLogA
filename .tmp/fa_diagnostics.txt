@@ -1,0 +1,74 @@
+## Pre-Computed Spectrum Diagnostics
+
+Each read is λ_obs ± 100 Å, stride=3.
+
+### λ_obs = 4805.9 Å  |  84 points
+  range: 4706-4906 Å
+  flux max: 5.37 at 4804.8  |  median: 2.44  |  std: 1.06
+  local peaks: 28
+  top 5 peak amps: [np.float64(5.37), np.float64(4.58), np.float64(4.28), np.float64(4.14), np.float64(3.91)]
+  brightest/2nd-brightest ratio: 1.17x
+
+### λ_obs = 4868.9 Å  |  84 points
+  range: 4769-4969 Å
+  flux max: 5.40 at 4810.4  |  median: 2.47  |  std: 1.01
+  local peaks: 27
+  top 5 peak amps: [np.float64(5.4), np.float64(5.05), np.float64(4.63), np.float64(4.28), np.float64(4.19)]
+  brightest/2nd-brightest ratio: 1.07x
+
+### λ_obs = 6083.3 Å  |  84 points
+  range: 5983-6183 Å
+  flux max: 3.35 at 6118.4  |  median: 1.57  |  std: 0.57
+  local peaks: 29
+  top 5 peak amps: [np.float64(3.35), np.float64(2.97), np.float64(2.82), np.float64(2.54), np.float64(2.44)]
+  brightest/2nd-brightest ratio: 1.13x
+
+### λ_obs = 6122.0 Å  |  84 points
+  range: 6022-6222 Å
+  flux max: 3.35 at 6118.4  |  median: 1.65  |  std: 0.52
+  local peaks: 27
+  top 5 peak amps: [np.float64(3.35), np.float64(2.97), np.float64(2.82), np.float64(2.54), np.float64(2.44)]
+  brightest/2nd-brightest ratio: 1.13x
+
+### λ_obs = 6142.1 Å  |  84 points
+  range: 6042-6242 Å
+  flux max: 2.62 at 6109.6  |  median: 1.64  |  std: 0.45
+  local peaks: 26
+  top 5 peak amps: [np.float64(2.62), np.float64(2.5), np.float64(2.49), np.float64(2.41), np.float64(2.41)]
+  brightest/2nd-brightest ratio: 1.05x
+
+### λ_obs = 6348.7 Å  |  84 points
+  range: 6249-6449 Å
+  flux max: 1.83 at 6272.8  |  median: 0.97  |  std: 0.35
+  local peaks: 27
+  top 5 peak amps: [np.float64(1.83), np.float64(1.76), np.float64(1.69), np.float64(1.48), np.float64(1.48)]
+  brightest/2nd-brightest ratio: 1.04x
+
+### λ_obs = 7230.4 Å  |  84 points
+  range: 7130-7330 Å
+  flux max: 1.29 at 7276.8  |  median: 0.65  |  std: 0.31
+  local peaks: 29
+  top 5 peak amps: [np.float64(1.29), np.float64(1.21), np.float64(1.12), np.float64(1.1), np.float64(1.06)]
+  brightest/2nd-brightest ratio: 1.06x
+
+### λ_obs = 7544.7 Å  |  126 points
+  range: 7445-7645 Å
+  flux max: 5.30 at 7605.6  |  median: 0.84  |  std: 1.62
+  local peaks: 41
+  top 5 peak amps: [np.float64(5.3), np.float64(2.81), np.float64(2.54), np.float64(1.74), np.float64(1.66)]
+  brightest/2nd-brightest ratio: 1.89x
+
+## Lyα Forest Check (4000-4805 Å)
+
+504 points
+  absorption features (height > 0.5σ): 16
+
+## [O III] Doublet Region (6000-6200 Å, stride=1)
+
+250 points
+  brightest 3 peaks:
+    6118.4 Å  (flux=3.35)
+    6128.0 Å  (flux=2.82)
+    6091.2 Å  (flux=2.71)
+  top 2 separation: 9.6 Å (expected [O III] doublet sep: 58.7 Å at z=0.226)
+  flux range: 0.36 - 3.35

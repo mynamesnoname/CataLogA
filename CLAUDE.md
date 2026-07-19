@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CataLogA ("Catastrophe + Log + Agent") is an early-stage project to build an agent that detects redshift catastrophes in DESI spectroscopy — cases where the Redrock template-fitting pipeline assigns a wrong redshift (e.g. sky/airglow lines mismatched as astrophysical features, or a wrong χ² local minimum winning the fit). Such failures bias BAO and large-scale-structure cosmology. The core validation idea: compare redshifts from repeat observations of the same source; a large |Z₁ − Z₂| flags a suspected catastrophe.
 
-No application code exists yet — the tracked repo is only a stub README, MIT license, and .gitignore. There is no build, lint, or test infrastructure. The working material lives in untracked directories described below.
+The tracked repo is a stub README + MIT license + .gitignore. Application code and working material live in untracked paths described below. No build, lint, or test infrastructure yet.
 
 ## Environment
 
@@ -17,6 +17,52 @@ conda activate cataloga        # Python 3.10: astropy 6.1.3, numpy 2.2, scipy, m
 # or one-off:
 conda run -n cataloga python <script.py>
 ```
+
+## Pipeline Architecture (5-step, 3-module)
+
+Validation workflow for redshift-catastrophe detection, designed 2026-07-19:
+
+```
+Module 1 (VI): load FITS → mask bad pixels → CWT feature detection → emit feature catalog
+              + read redrock redshifts as input hypotheses (pre-computed by Python)
+
+Module 2 (HA): SH×2 (parallel) — each hypothesis gets predict_lines(z) → cross-match
+              with CWT features + pre-computed fit_peak → line catalog (LIKELY/MARGINAL/NOT_FOUND)
+              FA×1 — cross-hypothesis feature audit: verify each claimed feature is physically
+              real in the spectrum; output cleaned catalog (KEEP/FLAG/REMOVE)
+
+Module 3 (HS+RA): Hypothesis Synthesis compares cleaned catalogs, produces verdict +
+              catastrophe attribution. Result Auditor does independent review.
+              (HS/RA not yet implemented.)
+
+Module X:      SelfEvolve — when ground truth available, blind review of discrepancies.
+              (Not yet implemented.)
+```
+
+Key methodological findings:
+- **Broad QSO lines (Lyα, C IV, C III]) are invisible to CWT** — Ricker wavelet at 1–80 px scales misses features with FWHM ≈ 100 Å. For broad lines, use fit_peak (Gaussian+linear) as primary evidence; the Three-Question Test (peak clarity/neighborhood comparison) is for narrow lines only.
+- **R/Z arm boundary (7520–7620 Å)** is noisy and prone to artifacts — flag or mask features here.
+- **Lyα asymmetry**: single Gaussian underpredicts S/N. S/N ≥ 2 + Δχ²/n ≥ 1 → at least MARGINAL.
+
+## `.test_src/` — Agent tool modules (gitignored)
+
+Port of FORMA's multi-agent spectroscopy tools, adapted for DESI coadd FITS (not NPZ):
+
+| Module | Purpose | Key functions |
+|---|---|---|
+| `lines.py` | Rest-frame line table from `.knowledge/lines.md` | `predict_lines(z)` — observed λ for all lines at given z |
+| `spectrum.py` | DESI coadd FITS I/O | `load_coadd_spectrum(path, targetid)` → B/R/Z dict; `read_spectrum_region()`; `merged_spectrum()` |
+| `fitting.py` | Gaussian line fitting | `fit_peak(wl, fl, center_guess)` → center, S/N, FWHM, Δχ²/n; `fit_doublet()` |
+| `features.py` | Ricker CWT feature detection | `find_features_cwt(wl, fl)` → emission/absorption catalogs (pure numpy/scipy, no pywt needed) |
+| `detect.py` | [O II] unresolved-doublet signature | `detect_oii_slope_change(wl, fl, target_wl)` → valley or slope-change detection |
+| `evaluate.py` | Rapid numerical hypothesis scoring | `evaluate_hypothesis()` + `compare_hypotheses()` — pre-LLM fast check |
+| `sh.py` | SH agent prompt builder | `build_user_message()` — CWT table + predicted lines + pre-computed fit_peak results |
+| `fa.py` | FA agent prompt builder | `build_user_message()` — contradiction matrix + doublet/O II/Lyα check sections |
+
+**Skills** (LLM system prompts, adapted from FORMA): `skills/SH_skill.md` (19K), `skills/FA_skill.md` (37K).
+**Knowledge base**: `kb/classification.md`, `kb/ionization.md`, `kb/lines.md`, `kb/composite_profile.md`.
+
+All modules support both `from .test_src.xxx import ...` and `sys.path.insert(0, ".test_src"); import xxx`.
 
 ## Test dataset (`.data/test_catas/`, gitignored, ~7 GB)
 
@@ -35,8 +81,15 @@ DESI `loa` production spectroscopy for 34 tile/night/petal combinations (observe
 Dataset caveats:
 
 - Six tiles exist on disk but are absent from the taxonomy: 1705, 1828, 7965, 8083, 8678, 9159.
-- `.data/test_catas/README.md` was written for the standalone dataset repo and is partly aspirational: `scripts/create_manifest.py` and `requirements.txt` do not exist, and `inspect_spectrum.py` has no CLI despite the documented `--target-index`/`--show` flags.
+- `.data/test_catas/README.md` refers to nonexistent `scripts/create_manifest.py` and `requirements.txt`; `inspect_spectrum.py` has no CLI despite documented `--target-index`/`--show`.
 - `test_catas.zip` at the repo root is the source archive for `.data/test_catas/`.
+
+**Repeat-pair structure** (critical for catastrophe detection):
+Each subclass has two (tile, night, petal) entries that are overlapping-sky repeat observations. Their redrock files share common TARGETIDs (5–42 per pair). To locate catastrophe candidates, intersect the two files on TARGETID (exclude sky fibers: TID>0, OBJTYPE='TGT') and rank by velocity difference Δv = c·|z_A−z_B|/(1+z_min). See `scripts/plot_catastrophes.py` for implementation.
+
+**Discrepant pairs CSV**: `output/catastrophe_spectra/discrepant_pairs_abs_dz_ge_0.01.csv` — 41 pairs with |Δz| ≥ 0.01 across all 14 subclasses (266 common targets total). Columns: index, FromWhichType, FromWhichCatastrophe, targetid, spec1fits, z1, RedrockType1, zwarn1, dchi2_1, spec2fits, z2, RedrockType2, zwarn2, dchi2_2, abs_dz. Among them, 19 pairs have both ZWARN=0 (pipeline confident but wrong — strict catastrophes).
+
+**Plotting**: `scripts/plot_catastrophes.py` — generates diagnostic spectrum figures (B/R/Z channels + line IDs + redshift annotations) for catastrophe subclasses. Outputs to `output/catastrophe_spectra/`.
 
 ## Reference material
 

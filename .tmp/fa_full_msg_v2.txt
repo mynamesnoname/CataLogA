@@ -1,0 +1,166 @@
+
+## BROAD-LINE METHODOLOGY (READ FIRST)
+
+**Critical**: The standard Three-Question peak-clarity test ONLY applies to NARROW lines and ABSORPTION lines. For BROAD lines (Lyα, C IV, C III]), use the following separate methodology:
+
+### Broad-Line Evaluation (replaces Step 3 for width_class=broad)
+
+1. **fit_peak assessment** (PRIMARY evidence):
+   - S/N ≥ 3 AND Δχ²/n ≥ 2 → LIKELY (broad line confirmed)
+   - S/N ≥ 2 AND Δχ²/n ≥ 1 → MARGINAL (broad line plausible)
+   - S/N < 2 OR Δχ²/n < 1 → NOT_FOUND (no significant broad Gaussian component)
+
+2. **Wide-window read** (±200 Å) — look for a BROAD UNDULATION spanning 80-200 Å:
+   - Smoothed (20px) flux peak must be ≥ 2σ above local median → supports broad line
+   - If smooth peak is < 1.5σ above median → even the broad component is noise-level
+   
+3. **Do NOT apply**: peak clarity (broad lines don't have sharp peaks), neighborhood comparison (narrow oscillations riding on a broad line are EXPECTED), width sanity (FWHM ~100+ Å IS the broad line)
+
+4. **Center offset**: ≤ 100 Å acceptable for broad lines (asymmetric profiles, especially Lyα)
+
+5. **Lyα asymmetric profile rule**: Lyα has blue absorption + red emission — single Gaussian center can be off by 20-30 Å and S/N is a LOWER BOUND. S/N ≥ 2 with Δχ²/n ≥ 1 → at least MARGINAL.
+
+### Narrow/Absorption Lines: use standard Three-Question Test
+
+For narrow emission (e.g. [O III]) and absorption lines, the standard peak clarity + neighborhood comparison + width sanity checks apply from the skill prompt.
+
+## Hypotheses Under Review
+
+| Index | Redshift | Spectype | LIKELY | MARGINAL | Total |
+|-------|----------|----------|--------|----------|-------|
+| H1 (z=0.226 GALAXY (expA)) | z=0.2264 | GALAXY | 0 likely | 5 marginal | 18 total |
+| H2 (z=2.952 QSO (expB)) | z=2.9522 | QSO | 1 likely | 2 marginal | 4 total |
+
+## Spectrum Summary
+
+| FITS | `.data/test_catas/spectro/loa/tiles/cumulative/9263/20240403/coadd-2-9263-thru20240403.fits` |
+| TARGETID | 39628250216924756 |
+| Wavelength | 3600.0 – 9824.0 Å |
+| Median SNR | 0.9 |
+
+## Feature Contradiction Matrix
+
+Each row = unique observed wavelength claimed by ≥1 hypothesis.
+
+| λ_obs (Å) | H1 (z=0.226 GALAXY ) | H2 (z=2.952 QSO (ex) | Type |
+|-------|-------|-------|-------|------|
+| 4805.9 | — | Lyα | emission |
+| 4868.9 | Hε (M) | — | emission |
+| 6083.3 | [O III]a (M) | — | emission |
+| 6122.0 | — | C IV (M) | emission |
+| 6142.1 | [O III]b (M) | — | emission |
+| 6348.7 | Mg I_abs (M) | — | absorption |
+| 7230.4 | Na D_abs (M) | — | absorption |
+| 7544.7 | — | C III] (M) | emission |
+
+🔵 Blue edge (< 4000 Å): throughput collapse, non-Gaussian noise.
+🔴 OH zone (> 7800 Å): OH airglow residuals, identification risk.
+(M) = MARGINAL status (no marker = LIKELY in SH output).
+
+## Doublet Pairs & Orphans
+
+- H1: O IIIa@6083.3 + O IIIb@6142.1 → expected ratio a/b ≈ 3.0
+
+## [O II] Morphology Check Required
+
+(No [O II] claims.)
+
+## Lyα Forest Check Required
+
+- H2: Lyα claimed at 4805.9 Å (status: LIKELY). Check for Lyα forest blueward.
+
+## Instructions
+
+1. Survey the Contradiction Matrix — note single vs multi-hypothesis rows, edge zone markers, doublet annotations.
+2. Batch-read ALL claimed wavelengths (±100 Å) using `read_spectrum_region`.
+3. Apply the Three-Question Test (peak clarity, width sanity, neighborhood comparison) to EVERY feature.
+4. Verify doublets — check both components independently.
+5. If [O II] is claimed, call `detect_oii_slope_change`.
+6. If Lyα is claimed, check for Lyα forest.
+7. Output verdicts for every matrix row → JSON block.
+## Broad Line Pre-Computed fit_peak Results
+
+For broad lines (Lyα, C IV, C III]), the Three-Question peak-clarity test is INAPPROPRIATE. These lines have FWHM ~100-130 Å, spanning the entire ±100 Å window. Use the following pre-computed Gaussian fits instead.
+
+### Lyα (H2, λ_pred=4805.9 Å)
+- **fit_peak**: center=4817.7±1.9 Å, amp=2.2347, σ=40.5 Å
+- **FWHM**: 95.4 Å = 5936 km/s  |  **S/N**: 3.8  |  **Δχ²/n**: 2.6
+- **center offset**: 11.8 Å
+
+### C IV (H2, λ_pred=6122.0 Å)
+- **fit_peak**: center=6119.8±3.1 Å, amp=1.0335, σ=56.5 Å
+- **FWHM**: 133.0 Å = 6518 km/s  |  **S/N**: 2.9  |  **Δχ²/n**: 2.1
+- **center offset**: 2.2 Å
+
+### C III] (H2, λ_pred=7544.7 Å)
+- **fit_peak**: center=7594.7±359.4 Å, amp=7.9417, σ=128.8 Å
+- **FWHM**: 303.3 Å = 11974 km/s  |  **S/N**: 18.9  |  **Δχ²/n**: 180.2
+- **center offset**: 50.0 Å
+
+
+## Broad Line Wide Reads (±200 Å, stride=2)
+
+These wider windows capture the full line profile. Note: broad QSO lines should show a BROAD UNDULATION spanning 80-200 Å, not narrow isolated peaks.
+
+### Lyα (λ_pred=4805.9 Å) — range 4606-5006 Å, 250 points
+  flux range: -0.70 – 5.37, median: 1.77
+  smoothed (20px) range: 0.53 – 3.79 at peak 4808 Å
+  smoothed peak above median: 2.4σ
+
+### C IV (λ_pred=6122.0 Å) — range 5922-6322 Å, 250 points
+  flux range: 0.13 – 2.76, median: 1.29
+  smoothed (20px) range: 0.38 – 2.07 at peak 6124 Å
+  smoothed peak above median: 2.2σ
+
+### C III] (λ_pred=7544.7 Å) — range 7345-7745 Å, 313 points
+  flux range: -12.17 – 9.28, median: 0.75
+  smoothed (20px) range: -2.11 – 1.60 at peak 7590 Å
+  smoothed peak above median: 1.5σ
+
+
+## Narrow-Line Diagnostics (±100 Å, stride=3)
+
+For narrow lines and absorption lines, use the standard Three-Question Test with these pre-computed reads.
+
+### Hε (H1, λ_pred=4868.9 Å, class=both)  |  84 points, range 4769-4969 Å
+  flux max: 5.40 at 4810.4 Å  |  median: 2.47  |  std: 1.01
+  top 5 peak amps: [np.float64(5.4), np.float64(5.05), np.float64(4.63), np.float64(4.28), np.float64(4.19)], brightest/2nd: 1.07x
+  local peaks: 27 → noise forest (criterion A)
+
+### [O III]a (H1, λ_pred=6083.3 Å, class=narrow)  |  84 points, range 5983-6183 Å
+  flux max: 3.35 at 6118.4 Å  |  median: 1.57  |  std: 0.57
+  top 5 peak amps: [np.float64(3.35), np.float64(2.97), np.float64(2.82), np.float64(2.54), np.float64(2.44)], brightest/2nd: 1.13x
+  local peaks: 29 → noise forest (criterion A)
+
+### [O III]b (H1, λ_pred=6142.1 Å, class=narrow)  |  84 points, range 6042-6242 Å
+  flux max: 2.62 at 6109.6 Å  |  median: 1.64  |  std: 0.45
+  top 5 peak amps: [np.float64(2.62), np.float64(2.5), np.float64(2.49), np.float64(2.41), np.float64(2.41)], brightest/2nd: 1.05x
+  local peaks: 26 → noise forest (criterion A)
+
+### Mg I_abs (H1, λ_pred=6348.7 Å, class=absorption)  |  84 points, range 6249-6449 Å
+  flux max: 1.83 at 6272.8 Å  |  median: 0.97  |  std: 0.35
+  top 5 peak amps: [np.float64(1.83), np.float64(1.76), np.float64(1.69), np.float64(1.48), np.float64(1.48)], brightest/2nd: 1.04x
+  local peaks: 27 → noise forest (criterion A)
+
+### Na D_abs (H1, λ_pred=7230.4 Å, class=absorption)  |  84 points, range 7130-7330 Å
+  flux max: 1.29 at 7276.8 Å  |  median: 0.65  |  std: 0.31
+  top 5 peak amps: [np.float64(1.29), np.float64(1.21), np.float64(1.12), np.float64(1.1), np.float64(1.06)], brightest/2nd: 1.06x
+  local peaks: 29 → noise forest (criterion A)
+
+
+## [O III] Doublet Detailed Check (H1: 6083.3 + 6142.1)
+
+250 points, full resolution
+Brightest 5 peaks in 6000-6200 Å:
+  6118.4 Å (flux=3.35) ← near C IV (H2)
+  6113.6 Å (flux=2.97) ← near C IV (H2)
+  6128.0 Å (flux=2.82) ← near C IV (H2)
+  6091.2 Å (flux=2.71) ← near [O III]a
+  6109.6 Å (flux=2.62)
+Expected [O III] separation at z=0.226: 58.8 Å. Actual top 2 separation: 4.8 Å
+
+## Lyα Forest Check (H2, 4000-4805 Å)
+
+504 points
+  absorption features (smoothed, height > 0.5σ): 0
+  flux range: -1.38 – 5.37, median: 0.90

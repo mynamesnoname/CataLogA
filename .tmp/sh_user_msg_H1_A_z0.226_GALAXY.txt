@@ -1,0 +1,82 @@
+## Spectrum Summary
+
+| Wavelength range | 3600.0 – 9824.0 Å |
+| Median SNR | 0.9 |
+
+Verify the redshift hypothesis z ≈ 0.2264.
+
+Verification window: z ∈ [0.1264, 0.3264]
+A CWT feature supports the hypothesis ONLY if its implied_z falls within this window. Each feature in the table already has its z pre-computed.
+Lines marked [fully masked] have NO data → assign MASKED.
+
+## Pre-Computed fit_peak Results
+
+The Predicted Lines table includes **pre-computed Gaussian+linear fits** for all 18 lines. These are computed with the appropriate width_3sigma for each line class (broad=90Å, narrow=25Å, both=50Å).
+
+**Evaluation workflow**:
+1. Check the **CWT Features** column first — pre-detected wavelet features are higher-trust than single-Gaussian fits
+2. Use the **fit_peak Result** column to CONFIRM or REFUTE:
+   - **S/N ≥ 3 AND Δχ²/n ≥ 1** → positive evidence (confirming)
+   - **S/N ≥ 1.5** → marginal evidence (may be real but weak)
+   - **S/N < 1.5** → no detection
+3. For **broad lines** (Lyα, C IV, C III], Mg II): S/N is a LOWER BOUND.
+4. For **Lyα specifically**: asymmetric profile (blue absorption + red emission). Single Gaussian fit will underestimate S/N and overestimate FWHM. **If Lyα fit shows S/N ≥ 2 and Δχ²/n ≥ 1, assign at least MARGINAL** — do NOT reject on center offset alone (offsets ≤ 100 Å are expected for asymmetric Lyα at this SNR).
+
+
+FITS file: .data/test_catas/spectro/loa/tiles/cumulative/7712/20240114/coadd-6-7712-thru20240114.fits
+TARGETID: 39628250216924756
+Output Report file: output/sh_report_H1_A_z0.226_GALAXY.md
+Output CSV file: output/sh_lines_H1_A_z0.226_GALAXY.csv
+
+## CWT Detected Features
+
+### Emission (peaks) — 2 features
+
+| λ (Å) | λ_err (Å) | Amp | FWHM (Å) | FWHM (km/s) | Ridge | SNR |
+|-------|-----------|-----|----------|-------------|-------|-----|
+| 9441.6 | 0.8 | 1.5 | 2.1 | 66 | 2 | 7.6 |
+| 9479.2 | 0.8 | 1.3 | 2.1 | 66 | 2 | 5.9 |
+
+### Absorption (troughs) — 3 features
+
+| λ (Å) | λ_err (Å) | Amp | FWHM (Å) | FWHM (km/s) | Ridge | SNR |
+|-------|-----------|-----|----------|-------------|-------|-----|
+| 9380.0 | 0.8 | -3.6 | 2.3 | 73 | 3 | 7.7 |
+| 9444.0 | 0.8 | -3.4 | 2.3 | 72 | 3 | 9.0 |
+| 9480.8 | 0.8 | -3.6 | 2.1 | 66 | 2 | 7.6 |
+
+
+## Predicted Lines at z = 0.2264
+
+**How to use**: The CWT Features column lists pre-detected wavelet features in the z-verification window [z=0.1264, z=0.3264] (ref@λ with implied_z). If CWT features are present, evaluate them FIRST (higher trust).
+The **fit_peak Result** column shows a pre-computed Gaussian+linear fit at λ_obs using the appropriate width_3sigma for this line class. Use this to CONFIRM or REFUTE CWT findings, especially for BROAD lines (Lyα, C IV, C III], Mg II) which CWT may miss because they are wider than the wavelet scales.
+
+**Lyα special note**: Lyα at z≳1.5 is highly asymmetric (blue-absorbed wing + red emission peak). A single Gaussian will systematically underpredict S/N and overpredict FWHM. If fit_peak finds ANY emission (S/N≥2, Δχ²/n≥1), treat as positive evidence even if offset is large — do NOT reject Lyα on center offset alone.
+When evaluating broad lines, the fit_peak S/N is a LOWER BOUND — the true line flux is larger than a single Gaussian can capture.
+
+| Name | λ_rest (Å) | λ_obs (Å) | Type | Width | Nearby CWT Features | fit_peak Result (center, S/N, FWHM, Δχ²/n) |
+|------|-----------|----------|------|-------|---------------------|-----------------------------------------------------|
+| Ne V | 3426.0 | 4201.6 | em | narrow | — | c=4250.8 ±1.2 S/N=0.8 FWHM=166km/s Δχ²/n=0.0 |
+| [O II] | 3727.0 | 4570.8 | em | narrow | — | c=4620.3 ±0.0 S/N=0.0 FWHM=153km/s Δχ²/n=0.0 |
+| Ca K | 3934.8 | 4825.6 | abs | absorption | — | c=4874.7 ±5.9 S/N=0.2 FWHM=209km/s Δχ²/n=0.0 |
+| Ca H | 3969.6 | 4868.3 | abs | absorption | — | c=4918.3 ±0.0 S/N=0.0 FWHM=286km/s Δχ²/n=-0.0 |
+| Hε | 3970.1 | 4868.9 | em | both | — | c=4818.9 ±2.2 S/N=3.5 FWHM=6814km/s Δχ²/n=2.6 |
+| Hδ | 4102.9 | 5031.8 | em | both | — | c=5081.8 ±2.1 S/N=0.4 FWHM=139km/s Δχ²/n=0.0 |
+| G-band | 4305.6 | 5280.4 | abs | absorption | — | c=5316.8 ±0.8 S/N=1.2 FWHM=133km/s Δχ²/n=0.0 |
+| Hγ | 4341.7 | 5324.7 | em | both | — | c=5274.7 ±0.0 S/N=0.0 FWHM=26767km/s Δχ²/n=-0.0 |
+| Hβ | 4862.7 | 5963.6 | em | both | — | c=5928.1 ±9.4 S/N=0.1 FWHM=119km/s Δχ²/n=0.0 |
+| [O III]a | 4960.3 | 6083.3 | em | narrow | — | c=6118.9 ±2.5 S/N=2.9 FWHM=5454km/s Δχ²/n=1.8 |
+| [O III]b | 5008.2 | 6142.1 | em | narrow | — | c=6122.0 ±2.4 S/N=3.2 FWHM=5378km/s Δχ²/n=2.2 |
+| Mg I | 5176.7 | 6348.7 | abs | absorption | — | c=6298.7 ±29.9 S/N=1.9 FWHM=13439km/s Δχ²/n=1.9 |
+| Na D | 5895.6 | 7230.4 | abs | absorption | — | c=7242.0 ±0.3 S/N=3.3 FWHM=98km/s Δχ²/n=0.1 |
+| [N II]a | 6549.8 | 8032.7 | em | narrow | — | c=8082.7 ±1.9 S/N=0.6 FWHM=87km/s Δχ²/n=0.0 |
+| Hα | 6564.6 | 8050.8 | em | both | — | c=8091.4 ±1.2 S/N=0.8 FWHM=87km/s Δχ²/n=0.0 |
+| [N II]b | 6585.3 | 8076.2 | em | narrow | — | c=8091.4 ±1.2 S/N=0.8 FWHM=87km/s Δχ²/n=0.0 |
+| [S II]a | 6718.3 | 8239.3 | em | narrow | — | c=8248.0 ±24.7 S/N=0.2 FWHM=1164km/s Δχ²/n=0.0 |
+| [S II]b | 6732.7 | 8257.0 | em | narrow | — | c=8307.0 ±21.2 S/N=0.4 FWHM=3111km/s Δχ²/n=0.0 |
+
+The CWT table lists all pre-detected features with their quality metrics. The Predicted Lines table references nearby features by wavelength + implied_z — cross-reference with the CWT table for FWHM, ridge, and SNR details. Evaluate and adopt features per the skill prompt criteria.
+
+Batch ALL line decisions in a single parallel turn.
+
+Phases: evaluate all lines → write CSV → write report → JSON block.

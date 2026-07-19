@@ -1,0 +1,5 @@
+name,rest_wavelength,predicted_obs,fitted_center,fitted_center_err,amplitude,amplitude_err,fitted_sigma,fwhm_km_s,ridge_length,cwt_snr,status
+Lyα,1216.0,4805.9,—,—,—,—,—,—,—,—,NOT_FOUND
+C IV,1549.0,6122.0,—,—,—,—,—,—,—,—,NOT_FOUND
+He II,1640.4,6483.2,—,—,—,—,—,—,—,—,NOT_FOUND
+C III],1909.0,7544.7,7607.2,0.8,6.3,—,0.9,82,2,7.7,MARGINAL

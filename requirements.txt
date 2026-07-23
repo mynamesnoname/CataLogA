@@ -1,0 +1,19 @@
+# CataLogA — redshift catastrophe detection agent
+# Core numerical stack
+numpy>=1.24
+scipy>=1.10
+astropy>=5.0
+specutils>=2.0
+
+# Plotting (scripts/plot_catastrophes.py)
+matplotlib>=3.7
+
+# LLM agent infrastructure
+langchain-core>=0.3
+langchain-openai>=0.2        # ChatOpenAI for DeepSeek/OpenAI-compatible APIs
+langgraph>=0.2                # StateGraph workflow (Phase 2+)
+pydantic>=2.0                 # Config validation (Phase 2+)
+
+# Optional but recommended
+tiktoken>=0.5                 # Token counting for context management
+python-dotenv>=1.0            # .env file loading

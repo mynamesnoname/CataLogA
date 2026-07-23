@@ -33,7 +33,7 @@ Module 2 (HA): SH×2 (parallel) — each hypothesis gets predict_lines(z) → cr
 
 Module 3 (HS+RA): Hypothesis Synthesis compares cleaned catalogs, produces verdict +
               catastrophe attribution. Result Auditor does independent review.
-              (HS/RA not yet implemented.)
+              (HS implemented 2026-07-19; RA not yet implemented.)
 
 Module X:      SelfEvolve — when ground truth available, blind review of discrepancies.
               (Not yet implemented.)
@@ -43,10 +43,42 @@ Key methodological findings:
 - **Broad QSO lines (Lyα, C IV, C III]) are invisible to CWT** — Ricker wavelet at 1–80 px scales misses features with FWHM ≈ 100 Å. For broad lines, use fit_peak (Gaussian+linear) as primary evidence; the Three-Question Test (peak clarity/neighborhood comparison) is for narrow lines only.
 - **R/Z arm boundary (7520–7620 Å)** is noisy and prone to artifacts — flag or mask features here.
 - **Lyα asymmetry**: single Gaussian underpredicts S/N. S/N ≥ 2 + Δχ²/n ≥ 1 → at least MARGINAL.
+- **HS does NOT score or rank hypotheses** — LLM forms a qualitative impression by examining specific features, FA verdicts, and raw spectrum. INDETERMINATE is a valid scientific output (not a failure). Verdict: PREFER_H1 / PREFER_H2 / INDETERMINATE.
+- **Full SH→FA→HS pipeline validated** on flagship case TID 39628250216924756 (QSO/Lya_failure): H1 (z=0.226) all 5 features FA-REMOVED as noise forests; H2 (z=2.952) Lyα FA-KEEP (S/N=3.8). HS correctly returned PREFER_H2.
+
+## Project structure
+
+```
+src/cataloga/              ← main package (PYTHONPATH: src/)
+├── tools/                 ← numerical layer (no LLM)
+│   ├── vi_utils.py        ← FORMA VI.py: FITS loading + arm overlap cleaning
+│   ├── spectrum.py         ← per-TARGETID FITS I/O (wraps vi_utils)
+│   ├── lines.py            ← .knowledge/lines.md → predict_lines()
+│   ├── fitting.py          ← fit_peak(), fit_doublet() (Gaussian + linear)
+│   ├── features.py         ← Ricker CWT ridge detection (pure numpy/scipy)
+│   ├── detect.py           ← [O II] slope-change detector
+│   └── evaluate.py         ← pre-LLM numerical hypothesis scoring
+├── core/                   ← infrastructure
+│   ├── config.py           ← Pydantic Config (LLM + data paths + arm params)
+│   ├── llm.py              ← ChatOpenAI factory (from FORMA)
+│   ├── state.py            ← CatalogaState (TypedDict, 20 fields)
+│   └── workflow.py         ← LangGraph StateGraph definition
+├── agents/                 ← Phase 2: BaseAgent + ResultWriter + SH/FA/HS wrappers
+│   ├── common/base_agent.py     ← skill loading, lazy LLM, retry, JSON parsing
+│   ├── common/result_writer.py  ← standardized CSV/JSON/MD output writer
+│   └── multi_agents/{sh,fa,hs}.py  ← agent wrappers (delegate to .test_src/ build logic)
+├── harness/                ← @tool functions for LLM agents (Phase 3+)
+└── data/                   ← skills + kb (Phase 2)
+
+.test_src/                  ← dev sandbox; re-exports from cataloga.tools for backward compat
+```
+
+Import style: `from cataloga.tools.lines import predict_lines` (with `src/` on PYTHONPATH).
+Old `sys.path.insert(0, ".test_src"); import lines` still works via `.test_src/__init__.py` shim.
 
 ## `.test_src/` — Agent tool modules (gitignored)
 
-Port of FORMA's multi-agent spectroscopy tools, adapted for DESI coadd FITS (not NPZ):
+Port of FORMA's multi-agent spectroscopy tools, adapted for DESI coadd FITS:
 
 | Module | Purpose | Key functions |
 |---|---|---|
@@ -58,11 +90,32 @@ Port of FORMA's multi-agent spectroscopy tools, adapted for DESI coadd FITS (not
 | `evaluate.py` | Rapid numerical hypothesis scoring | `evaluate_hypothesis()` + `compare_hypotheses()` — pre-LLM fast check |
 | `sh.py` | SH agent prompt builder | `build_user_message()` — CWT table + predicted lines + pre-computed fit_peak results |
 | `fa.py` | FA agent prompt builder | `build_user_message()` — contradiction matrix + doublet/O II/Lyα check sections |
+| `hs.py` | HS agent prompt builder | `build_user_message()` — side-by-side FA catalogs + redrock conflict summary |
+| `hs_utils.py` | HS helpers | `load_fa_catalog()` — parse FA CSV into catalog dict; `build_redrock_dict()` |
 
-**Skills** (LLM system prompts, adapted from FORMA): `skills/SH_skill.md` (19K), `skills/FA_skill.md` (37K).
+**Skills** (LLM system prompts, adapted from FORMA): `skills/SH_skill.md` (19K), `skills/FA_skill.md` (37K), `skills/HS_synthesis_skill.md` (8K).
 **Knowledge base**: `kb/classification.md`, `kb/ionization.md`, `kb/lines.md`, `kb/composite_profile.md`.
 
 All modules support both `from .test_src.xxx import ...` and `sys.path.insert(0, ".test_src"); import xxx`.
+
+## Known Issues & Planned Improvements
+
+### VI: arm boundary masking (not yet implemented)
+
+DESI coadd spectra span three cameras with overlap zones:
+
+| Boundary | Range | Issue |
+|---|---|---|
+| B/R overlap | 5760–5800 | Minor — two cameras agree, take median or B |
+| R/Z gap | 7520–7620 | **Major** — CCD stitching artifacts, flux extremes, features here are unreliable |
+
+Currently `spectrum.py` masks bad pixels (ivar≤0, MASK≠0) but does NOT mask arm boundaries. The R/Z gap caused C III] false positives in FA (±359Å uncertainty at ~7545Å). FORMA handles this in VI by reading arm ranges and masking boundary zones before downstream agents see the spectrum.
+
+**Planned fix**: VI should output two spectrum versions:
+1. **Raw** — arm boundaries marked but not removed (for FA/HS to inspect)
+2. **Cleaned** — arm boundaries masked out (for CWT and SH — prevents false detection)
+
+This lets FA/HS explicitly note "this feature falls in a masked boundary zone" rather than relying on verbal warnings.
 
 ## Test dataset (`.data/test_catas/`, gitignored, ~7 GB)
 

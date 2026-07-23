@@ -1,9 +1,0 @@
-wl_obs,feature_type,claimed_line,hypothesis,is_real,confidence,recommendation
-4805.9,emission,Lyalpha,H2,false,HIGH,REMOVE
-4868.9,emission,Hepsilon,H1,false,HIGH,REMOVE
-6083.3,emission,OIIIa,H1,false,HIGH,REMOVE
-6122.0,emission,CIV,H2,false,MEDIUM,REMOVE
-6142.1,emission,OIIIb,H1,false,HIGH,REMOVE
-6348.7,absorption,MgI_abs,H1,false,MEDIUM,REMOVE
-7230.4,absorption,NaD_abs,H1,false,MEDIUM,REMOVE
-7544.7,emission,CIII,H2,false,MEDIUM,REMOVE

@@ -1,9 +1,0 @@
-wl_obs,feature_type,is_real,confidence,recommendation,issues
-4805.9,emission,true,HIGH,KEEP,"fit_peak S/N=3.8 Δχ2/n=2.6; wide-window 2.4σ; Lyα center offset 11.8Å acceptable; Lyα forest not detected (0 absorption features >0.5σ in 4000-4805Å) but one-way rule does not exclude"
-4868.9,emission,false,HIGH,REMOVE,"No discernible peak at 4868.9Å; max flux 5.40 at 4810.4Å (Lyα from H2); noise forest with 27 local peaks; brightest/2nd=1.07x"
-6083.3,emission,false,HIGH,REMOVE,"No discernible peak at 6083.3Å; max flux 3.35 at 6118.4Å (C IV from H2); noise forest with 29 peaks; brightest/2nd=1.13x"
-6122.0,emission,true,MEDIUM,FLAG,"fit_peak S/N=2.9 Δχ2/n=2.1 — MARGINAL (just below KEEP threshold of 3); wide-window 2.2σ supports broad line; center offset 2.2Å; narrow oscillations riding on broad undulation are normal"
-6142.1,emission,false,HIGH,REMOVE,"No discernible peak at 6142.1Å; max flux 2.62 at 6109.6Å (C IV region); noise forest with 26 peaks; brightest/2nd=1.05x"
-6348.7,absorption,false,HIGH,REMOVE,"No discernible absorption trough at 6348.7Å; noise forest with 27 peaks in 200Å; no dominant dip in low-SNR spectrum (median SNR=0.9)"
-7230.4,absorption,false,HIGH,REMOVE,"No discernible absorption trough at 7230.4Å; noise forest with 29 peaks in 200Å; brightest/2nd=1.06x; no absorption feature stands out"
-7544.7,emission,true,MEDIUM,FLAG,"fit_peak S/N=18.9 Δχ2/n=180.2 — meets KEEP thresholds, but wide-window smoothed peak only 1.5σ (marginal); center uncertainty ±359Å; FWHM=11974km/s extremely broad; smoothed profile dips negative; noise-dominated spectrum (SNR=0.9)"

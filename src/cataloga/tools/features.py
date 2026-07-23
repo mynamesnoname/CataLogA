@@ -13,6 +13,7 @@ Algorithm (same as FORMA's ``cwt_feature_finder.py``):
 """
 
 import numpy as np
+from scipy.ndimage import median_filter
 from scipy.signal import find_peaks
 
 SIGMA_TO_FWHM = 2.0 * np.sqrt(2.0 * np.log(2.0))
@@ -35,36 +36,17 @@ def _local_noise_mad(signal, half_window=50):
 
 
 # ---------------------------------------------------------------------------
-# Ricker wavelet CWT
+# Ricker wavelet CWT — delegates to PyWavelets (FORMA-compatible)
 # ---------------------------------------------------------------------------
 
-def _ricker_wavelet(width):
-    """Ricker (Mexican hat) wavelet of given width in pixels.
-
-    Returns (t, ψ) where t is centred at 0 and ∫ψ dt ≈ 0.
-    """
-    t = np.arange(-4 * width, 4 * width + 1, dtype=np.float64)
-    a = 2.0 / (np.sqrt(3 * width) * np.pi**0.25)
-    x = t / width
-    psi = a * (1 - x**2) * np.exp(-x**2 / 2)
-    return t, psi
-
-
 def _cwt_ricker(signal, scales):
-    """Compute Ricker CWT at each scale via convolution.
+    """Compute Ricker CWT via ``pywt.cwt`` (FORMA line 78).
 
     Returns (n_scales, n_pixels) coefficient matrix.
     """
-    n = len(signal)
-    n_scales = len(scales)
-    coef = np.zeros((n_scales, n), dtype=np.float64)
-    for i, s in enumerate(scales):
-        if s < 1.0:
-            s = 1.0
-        t, psi = _ricker_wavelet(s)
-        conv = np.convolve(signal, psi, mode='same')
-        coef[i, :] = conv / max(np.sum(np.abs(psi)), 1e-10)
-    return coef
+    import pywt
+    cwt_mat, _ = pywt.cwt(signal, scales, 'mexh')
+    return cwt_mat
 
 
 # ---------------------------------------------------------------------------
@@ -179,12 +161,12 @@ def find_features_cwt(wavelength, flux, snr_thresh=5.0, min_ridge_length=2,
     else:
         interp = flux
 
-    # Chebyshev continuum fitting (ported from FORMA VI.py) → residual
-    from cataloga.tools.continuum import run_continuum_fitting_masked
-    _continuum, residual = run_continuum_fitting_masked(
-        wavelength, interp, peaks=None, troughs=None,
-        chebyshev_min_degree=1, chebyshev_max_degree=10, verbose=False,
-    )
+    # Rough continuum via wide median filter -> residual (FORMA line 184)
+    median_width = max(51, n // 20)
+    if median_width % 2 == 0:
+        median_width += 1
+    baseline = median_filter(interp, size=median_width)
+    residual = interp - baseline  # emission > 0, absorption < 0
 
     scales = np.logspace(np.log10(min_scale), np.log10(max_scale), n_scales)
     mean_dwave = np.median(np.diff(wavelength)) if len(wavelength) > 1 else 1.0

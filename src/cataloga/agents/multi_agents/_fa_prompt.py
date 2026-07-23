@@ -138,9 +138,14 @@ def build_user_message(
 
     # Load spectrum for summary
     sp = load_coadd_spectrum(coadd_path, targetid)
-    w_all, f_all, _ = merged_spectrum(sp)
+    w_all, f_all, iv_all = merged_spectrum(sp)
     wl_min, wl_max = float(np.nanmin(w_all)), float(np.nanmax(w_all))
-    snr_median = float(np.nanmedian(np.abs(f_all) / np.nanstd(f_all)))
+    noise = 1.0 / np.sqrt(np.maximum(iv_all, 1e-30))
+    valid = np.isfinite(noise) & (noise < 1e10)
+    if valid.sum() > 100:
+        snr_median = float(np.nanmedian(np.abs(f_all)[valid] / noise[valid]))
+    else:
+        snr_median = float(np.nanmedian(np.abs(f_all) / np.nanstd(f_all)))
 
     # Hypothesis summary
     hyp_lines = []

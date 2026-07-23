@@ -120,12 +120,15 @@ def _build_diagnostics_section(diagnostics: dict | None) -> str:
 # ---------------------------------------------------------------------------
 
 def build_user_message(
-    coadd_path: str,
+    coadd_a: str,
+    coadd_b: str,
     targetid: int,
     redrock_a: dict,
     redrock_b: dict,
     fa_catalog_a: dict,
     fa_catalog_b: dict,
+    peaks_a=None, troughs_a=None,
+    peaks_b=None, troughs_b=None,
     diagnostics: dict | None = None,
 ) -> str:
     """Build the HS user prompt.
@@ -145,11 +148,16 @@ def build_user_message(
     diagnostics : dict, optional — Lyα forest, O II slope-change, doublet results.
     """
     # ---- Spectrum summary ----
-    sp = load_coadd_spectrum(coadd_path, targetid)
-    w_all, f_all, _ = merged_spectrum(sp)
+    sp = load_coadd_spectrum(coadd_b, targetid)
+    w_all, f_all, iv_all = merged_spectrum(sp)
     wl_min = float(np.nanmin(w_all))
     wl_max = float(np.nanmax(w_all))
-    snr_median = float(np.nanmedian(np.abs(f_all) / np.nanstd(f_all)))
+    noise = 1.0 / np.sqrt(np.maximum(iv_all, 1e-30))
+    valid = np.isfinite(noise) & (noise < 1e10)
+    if valid.sum() > 100:
+        snr_median = float(np.nanmedian(np.abs(f_all)[valid] / noise[valid]))
+    else:
+        snr_median = float(np.nanmedian(np.abs(f_all) / np.nanstd(f_all)))
     n_finite = int(np.sum(np.isfinite(f_all)))
 
     # ---- Redrock conflict summary ----
@@ -181,7 +189,9 @@ def build_user_message(
     # ---- Spectrum info ----
     spec_info = (
         "## Spectrum Info\n\n"
-        f"| FITS | `{coadd_path}` |\n"
+        "Two repeat observations of the same source:\n\n"
+        f"| Coadd A (H1) | `{coadd_a}` |\n"
+        f"| Coadd B (H2) | `{coadd_b}` |\n"
         f"| TARGETID | {targetid} |\n"
         f"| Wavelength | {wl_min:.0f} – {wl_max:.0f} Å ({n_finite} valid pixels) |\n"
         f"| Median SNR | {snr_median:.1f} |\n"

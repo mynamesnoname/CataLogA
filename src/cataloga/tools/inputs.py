@@ -2,7 +2,7 @@
 
 Input convention (one subdirectory per TARGETID)::
 
-    {INPUT_DIR}/
+    {INTERMEDIATE_DIR}/
     └── {targetid}/
         ├── coadd-A.fits      # first observation coadd
         ├── redrock-A.fits    # first observation redrock

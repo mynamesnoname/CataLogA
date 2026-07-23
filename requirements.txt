@@ -4,6 +4,7 @@ numpy>=1.24
 scipy>=1.10
 astropy>=5.0
 specutils>=2.0
+PyWavelets>=1.4
 
 # Plotting (scripts/plot_catastrophes.py)
 matplotlib>=3.7

@@ -21,7 +21,7 @@ class Config:
         llm_thinking: str = "disabled",
         llm_streaming: bool = False,
         data_root: str = ".data/test_catas",
-        input_dir: str = "",
+        intermediate_dir: str = "",
         output_dir: str = "",
         targetid: str = "",
     ):
@@ -33,9 +33,10 @@ class Config:
         self.llm_thinking = llm_thinking or os.environ.get("LLM_THINKING", "disabled")
         self.llm_streaming = llm_streaming or os.environ.get("LLM_STREAMING", "").lower() in ("1", "true", "yes")
         self.data_root = data_root or os.environ.get("DATA_ROOT", ".data/test_catas")
-        self.input_dir = input_dir or os.environ.get("INPUT_DIR", "input")
+        self.intermediate_dir = intermediate_dir or os.environ.get("INTERMEDIATE_DIR", "input")
         self.output_dir = output_dir or os.environ.get("OUTPUT_DIR", "output")
         self.targetid = targetid or os.environ.get("TARGETID", "")
+        self.dz_threshold = float(os.environ.get("DZ_THRESHOLD", "0.01"))
 
         # ── CWT feature detection ────────────────────────────
         self.cwt_snr_thresh = float(
@@ -48,6 +49,12 @@ class Config:
             os.environ.get("CWT_MIN_WIDTH", "1.0"))
         self.cwt_max_width = float(
             os.environ.get("CWT_MAX_WIDTH", "80.0"))
+
+        # ── LangChain agent recursion limits (FORMA defaults) ─
+        self.max_turns_sh = int(os.environ.get("MAX_TURNS_SH", "500"))
+        self.max_turns_fa = int(os.environ.get("MAX_TURNS_FA", "500"))
+        self.max_turns_hs = int(os.environ.get("MAX_TURNS_HS", "500"))
+        self.max_turns_ra = int(os.environ.get("MAX_TURNS_RA", "500"))
 
         # Spectrum preprocessing — DESI defaults
         self.arm_names = ["B", "R", "Z"]

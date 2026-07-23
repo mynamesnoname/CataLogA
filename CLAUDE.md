@@ -18,6 +18,19 @@ conda activate cataloga        # Python 3.10: astropy 6.1.3, numpy 2.2, scipy, m
 conda run -n cataloga python <script.py>
 ```
 
+## FORMA porting rule
+
+When porting a module / function from FORMA (``~/code/FORMA/``):
+
+1. **Copy-paste the original FORMA file** — drop it into the target CataLogA path verbatim.
+2. **Fix imports and dependencies** — install missing packages, resolve import paths.
+3. **Only then adapt the interface** — change function signatures, wiring, and state keys to match CataLogA conventions.
+4. **Keep the algorithm untouched** unless there is a confirmed bug or a hard incompatibility that cannot be resolved at the import / interface layer.
+
+This rule exists because hand-ported "equivalent" code has repeatedly introduced subtle numerical differences (L1 vs L2 normalisation in CWT, median-filter vs Chebyshev ordering, missing NaN guards). Copy-paste first, adapt second.
+
+If the copied code requires packages not in ``requirements.txt``, install them in the ``cataloga`` conda env and add them to ``requirements.txt``.  Do not rewrite a dependency's work just to avoid a new package — that path already led to bugs.
+
 ## Pipeline Architecture (5-step, 3-module)
 
 Validation workflow for redshift-catastrophe detection, designed 2026-07-19:

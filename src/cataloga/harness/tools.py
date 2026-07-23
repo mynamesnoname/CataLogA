@@ -324,3 +324,50 @@ def build_tools(wavelength, flux, ivar=None, kb_dir=None):
         write_report,
         write_lines_csv,
     ]
+
+
+# ---------------------------------------------------------------------------
+# Dual-spectrum tool builder
+# ---------------------------------------------------------------------------
+
+def build_dual_tools(wl_a, fl_a, wl_b, fl_b):
+    """Build tools with access to TWO spectra (A and B repeats).
+
+    ``read_spectrum_region`` and ``detect_oii_slope_change`` accept a
+    ``spec`` parameter: ``"A"`` or ``"B"``.
+
+    ``fit_peak`` and ``fit_doublet`` operate on spectrum A (SH-H1) or
+    spectrum B (SH-H2) — use separate ``build_tools()`` calls for each SH.
+    """
+    _wl_a = np.asarray(wl_a, dtype=float); _fl_a = np.asarray(fl_a, dtype=float)
+    _wl_b = np.asarray(wl_b, dtype=float); _fl_b = np.asarray(fl_b, dtype=float)
+
+    def _read_spec(spec: str, wl_min: float, wl_max: float) -> dict:
+        """Read a slice from spectrum A or B.
+
+        Args:
+            spec: "A" or "B"
+            wl_min, wl_max: wavelength range (Å)
+        """
+        wl = _wl_a if spec.upper() == "A" else _wl_b
+        fl = _fl_a if spec.upper() == "A" else _fl_b
+        return read_spectrum_region(wl, fl, None, wl_min, wl_max)
+
+    def _detect_oii(spec: str, target_wl: float, search_window: float = 25.0) -> dict:
+        """Run OII slope-change detection on spectrum A or B.
+
+        Args:
+            spec: "A" or "B"
+            target_wl: observed wavelength where [O II] is claimed
+            search_window: half-width of search window (default 25 Å)
+        """
+        wl = _wl_a if spec.upper() == "A" else _wl_b
+        fl = _fl_a if spec.upper() == "A" else _fl_b
+        return _detect_oii_core(wl, fl, target_wl, search_window)
+
+    return [
+        _read_spec,
+        _detect_oii,
+        grep_kb,
+        write_report,
+    ]

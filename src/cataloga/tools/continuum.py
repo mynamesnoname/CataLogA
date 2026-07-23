@@ -113,13 +113,17 @@ def run_continuum_fitting_masked(
         n_masked_pts += int(in_region.sum())
         fit_mask &= ~in_region
 
+    # Also mask NaN/Inf pixels (arm overlap zones produce NaN flux values)
+    finite_mask = np.isfinite(flux)
+    fit_mask &= finite_mask
+
     n_fit_pts = int(fit_mask.sum())
     print(f"[Continuum] {len(all_features)} features, masked {n_masked_pts} px, "
           f"fitting {n_fit_pts}/{len(wavelengths)} px")
 
     if n_fit_pts < 20:
-        print("[Continuum] <20 usable points, falling back to full-spectrum fit")
-        fit_mask = np.ones(len(wavelengths), dtype=bool)
+        print("[Continuum] <20 usable points, falling back to finite-only fit")
+        fit_mask = np.isfinite(flux)
 
     wave_fit = wavelengths[fit_mask]
     flux_fit = flux[fit_mask]

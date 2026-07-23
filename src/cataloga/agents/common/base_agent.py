@@ -48,20 +48,26 @@ def _extract_json_block(raw: str):
     """
     if not isinstance(raw, str):
         return raw
-    # Try ```json ... ``` fence
+    # 1) ```json ... ``` with closing fence
     m = re.search(r'```json\s*(.*?)\s*```', raw, re.DOTALL)
+    # 2) ```json ... (no closing fence, LLM sometimes forgets it)
+    if not m:
+        m = re.search(r'```json\s*(.+)$', raw, re.DOTALL)
     if m:
         try:
             return json.loads(m.group(1))
         except Exception:
             pass
-    # Try bare JSON object anywhere in text
-    m = re.search(r'\{[^{}]*"verdict"\s*:\s*"[^"]+"[^{}]*\}', raw, re.DOTALL)
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except Exception:
-            pass
+    # 3) Bare JSON object containing common FA/HS/RA keys
+    for key_pat in ['feature_verdicts|spectrum_quality|verdict',
+                    '"verdict"',
+                    '"recommendation"']:
+        m = re.search(r'\{.*' + key_pat + r'.*\}', raw, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                pass
     return None
 
 

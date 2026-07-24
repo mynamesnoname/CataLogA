@@ -73,10 +73,20 @@ def merged_spectrum(spectrum: dict):
 
 def load_redrock_info(redrock_path: str, targetid: int):
     """Return redshift metadata for one TARGETID from a redrock FITS file."""
+    import os
+    import re
     with fits.open(redrock_path, memmap=True) as h:
         zs = h["REDSHIFTS"].data
         row = int(np.where(zs["TARGETID"] == targetid)[0][0])
         fm = h["FIBERMAP"].data
+        # (tile, night, petal) are encoded in the standard DESI path:
+        # .../cumulative/{tile}/{night}/redrock-{petal}-{tile}-thru{night}.fits
+        # Resolve symlinks first (intermediate inputs are symlinks).
+        tile = night = petal = "?"
+        m = re.search(r"cumulative/(\d+)/(\d+)/redrock-(\d+)-",
+                      os.path.realpath(redrock_path).replace(os.sep, "/"))
+        if m:
+            tile, night, petal = m.group(1), m.group(2), int(m.group(3))
         return {
             "targetid": int(targetid),
             "z": float(zs["Z"][row]),
@@ -86,4 +96,5 @@ def load_redrock_info(redrock_path: str, targetid: int):
             "deltachi2": float(zs["DELTACHI2"][row]),
             "spectype": str(zs["SPECTYPE"][row]).strip(),
             "desi_target": int(fm["DESI_TARGET"][row]),
+            "tile": tile, "night": night, "petal": petal,
         }

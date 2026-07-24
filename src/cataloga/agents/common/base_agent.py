@@ -350,8 +350,16 @@ class BaseAgent:
 
         raw_text = _extract_text_from_messages(messages)
 
+        result_out = _parse_json(raw_text) if parse_json else raw_text
+        if parse_json and isinstance(result_out, str):
+            # Narrative followed by a fenced JSON block: _parse_json only
+            # handles pure-JSON output, so fall back to block extraction.
+            # Without this, downstream stages receive raw text instead of
+            # the parsed verdict dict.
+            result_out = _extract_json_block(raw_text) or result_out
+
         return {
-            "result": _parse_json(raw_text) if parse_json else raw_text,
+            "result": result_out,
             "messages": messages,
             "tool_results": tool_results,
         }

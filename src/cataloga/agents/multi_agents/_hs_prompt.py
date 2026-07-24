@@ -30,6 +30,8 @@ def _build_fa_comparison_table(catalog_a: dict, catalog_b: dict) -> str:
     for cat_idx, cat in enumerate([catalog_a, catalog_b]):
         idx = cat["hypothesis_idx"]
         for f in cat.get("features", []):
+            if f.get("recommendation") not in ("KEEP", "FLAG"):
+                continue  # REMOVED features are summarized in the section below
             wl = round(f["wl_obs"], 1)
             ftype = f.get("feature_type", "emission")
             found = False
@@ -59,7 +61,7 @@ def _build_fa_comparison_table(catalog_a: dict, catalog_b: dict) -> str:
         h2_claim = "—"; h2_status = "—"
         fa_verdict = "?"; fa_confidence = "?"
         for hyp_idx, name, status in claims:
-            if hyp_idx == 1:
+            if hyp_idx == 0:
                 h1_claim = name; h1_status = status
             else:
                 h2_claim = name; h2_status = status
@@ -88,11 +90,10 @@ def _build_removed_summary(catalog_a: dict, catalog_b: dict) -> str:
     """Summarize FA-REMOVED features per hypothesis."""
     lines = ["## FA-REMOVED Features\n"]
     for cat in [catalog_a, catalog_b]:
-        idx = cat["hypothesis_idx"]
         label = cat["label"]
         removed = cat.get("features_removed", [])
         if removed:
-            lines.append(f"### H{idx} ({label}) — {len(removed)} removed")
+            lines.append(f"### {label} — {len(removed)} removed")
             for f in removed:
                 reason = f.get("reason", "")
                 lines.append(
@@ -102,7 +103,7 @@ def _build_removed_summary(catalog_a: dict, catalog_b: dict) -> str:
                 )
             lines.append("")
         else:
-            lines.append(f"### H{idx} ({label}): no features removed\n")
+            lines.append(f"### {label}: no features removed\n")
     return "\n".join(lines) + "\n"
 
 
@@ -140,7 +141,7 @@ def build_user_message(
     redrock_a, redrock_b : dict
         Keys: z, zerr, zwarn, spectype, deltachi2, tile, night, petal.
     fa_catalog_a, fa_catalog_b : dict
-        - hypothesis_idx: 1 or 2
+        - hypothesis_idx: 0 (H1) or 1 (H2)
         - label: "z=... SPTYPE (expX)"
         - features: list[dict] — KEEP/FLAG with wl_obs, feature_type, claimed_line,
           sh_status, is_real, confidence, recommendation

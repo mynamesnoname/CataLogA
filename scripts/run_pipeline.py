@@ -74,7 +74,9 @@ def _resolve_ids(config: Config, args: list[str]) -> list[int]:
         try:
             return [int(arg)]
         except ValueError:
-            pass
+            raise SystemExit(
+                f"Unrecognized argument: {arg!r} "
+                "(expected a TARGETID integer or --all)")
 
     # .env
     env_val = config.targetid.strip()
@@ -93,7 +95,7 @@ def _resolve_ids(config: Config, args: list[str]) -> list[int]:
     m = re.match(r'^tail-(\d+)$', env_val, re.IGNORECASE)
     if m:
         k = int(m.group(1))
-        return all_tids[-k:]
+        return all_tids[-k:] if k else []
     m = re.match(r'^head-(\d+)$', env_val, re.IGNORECASE)
     if m:
         k = int(m.group(1))
@@ -128,6 +130,10 @@ def _resolve_ids(config: Config, args: list[str]) -> list[int]:
 async def main():
     config = Config()
     tids = _resolve_ids(config, sys.argv[1:])
+    if not tids:
+        raise SystemExit(
+            f"No targets resolved. Check TARGETID={config.targetid!r} and "
+            f"{config.intermediate_dir}/targets.txt")
 
     print(f"Targets: {tids}")
     print(f"Output:  {config.output_dir}/<targetid>/")

@@ -15,10 +15,10 @@ class Config:
         self,
         llm_api_key: str = "",
         llm_base_url: str = "",
-        llm_model: str = "deepseek-v4-pro",
-        llm_temperature: float = 0.1,
+        llm_model: str = "",
+        llm_temperature: float | None = None,
         llm_max_tokens: int | None = None,
-        llm_thinking: str = "disabled",
+        llm_thinking: str = "",
         llm_streaming: bool = False,
         data_root: str = ".data/test_catas",
         intermediate_dir: str = "",
@@ -28,7 +28,9 @@ class Config:
         self.llm_api_key = llm_api_key or os.environ.get("LLM_API_KEY", "")
         self.llm_base_url = llm_base_url or os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
         self.llm_model = llm_model or os.environ.get("LLM_MODEL", "deepseek-v4-pro")
-        self.llm_temperature = llm_temperature
+        self.llm_temperature = (
+            llm_temperature if llm_temperature is not None
+            else float(os.environ.get("LLM_TEMPERATURE", "0.1")))
         self.llm_max_tokens = llm_max_tokens or resolve_max_tokens(self.llm_base_url)
         self.llm_thinking = llm_thinking or os.environ.get("LLM_THINKING", "disabled")
         self.llm_streaming = llm_streaming or os.environ.get("LLM_STREAMING", "").lower() in ("1", "true", "yes")
@@ -55,6 +57,12 @@ class Config:
         self.max_turns_fa = int(os.environ.get("MAX_TURNS_FA", "500"))
         self.max_turns_hs = int(os.environ.get("MAX_TURNS_HS", "500"))
         self.max_turns_ra = int(os.environ.get("MAX_TURNS_RA", "500"))
+
+        # ── Stage-level retry for LLM stages (SH/FA/HS/RA) ─────
+        # A failed stage is retried up to this many times; if all attempts
+        # fail, the target fails — degraded results never flow downstream.
+        self.stage_retries = int(os.environ.get("STAGE_RETRIES", "1"))
+        self.stage_retry_delay = float(os.environ.get("STAGE_RETRY_DELAY", "30"))
 
         # Spectrum preprocessing — DESI defaults
         self.arm_names = ["B", "R", "Z"]

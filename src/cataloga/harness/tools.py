@@ -74,7 +74,12 @@ def _do_fit_peak(wl, fl, center_guess, width_3sigma=25.0, line_type="emission",
 def _detect_oii_core(wavelength, flux, target_wl, search_window=25.0) -> dict:
     """Delegate to ``cataloga.tools.detect.detect_oii_slope_change``."""
     from cataloga.tools.detect import detect_oii_slope_change
-    return detect_oii_slope_change(wavelength, flux, target_wl, search_window)
+    r = detect_oii_slope_change(wavelength, flux, target_wl, search_window)
+    r["note"] = ("Designed for the NARROW [O II] 3727 doublet. On broad lines "
+                 "(e.g. QSO Lyα / C IV) the returned FWHM measures only the "
+                 "sharpest sub-structure inside the window and is NOT the line "
+                 "width — judge line breadth from read_spectrum_region instead.")
+    return r
 
 
 # ---------------------------------------------------------------------------
@@ -168,17 +173,19 @@ def predict_lines(redshift: float, line_type: str = "all",
     if line_type in ("emission", "all"):
         for name, rest_wl in EMISSION_LINES.items():
             obs_wl = rest_wl * (1 + redshift)
-            if wavelength_min is not None and wavelength_max is not None:
-                if obs_wl < wavelength_min or obs_wl > wavelength_max:
-                    continue
+            if wavelength_min is not None and obs_wl < wavelength_min:
+                continue
+            if wavelength_max is not None and obs_wl > wavelength_max:
+                continue
             lines_out.append({"name": name, "rest_wl": rest_wl, "obs_wl": round(obs_wl, 1),
                               "width_class": EMISSION_LINE_WIDTHS.get(name, "narrow"), "type": "emission"})
     if line_type in ("absorption", "all"):
         for name, rest_wl in ABSORPTION_LINES.items():
             obs_wl = rest_wl * (1 + redshift)
-            if wavelength_min is not None and wavelength_max is not None:
-                if obs_wl < wavelength_min or obs_wl > wavelength_max:
-                    continue
+            if wavelength_min is not None and obs_wl < wavelength_min:
+                continue
+            if wavelength_max is not None and obs_wl > wavelength_max:
+                continue
             lines_out.append({"name": name, "rest_wl": rest_wl, "obs_wl": round(obs_wl, 1),
                               "width_class": "absorption", "type": "absorption"})
     lines_out.sort(key=lambda x: x["obs_wl"])
@@ -349,6 +356,8 @@ def build_dual_tools(wl_a, fl_a, wl_b, fl_b):
             spec: "A" or "B"
             wl_min, wl_max: wavelength range (Å)
         """
+        if spec.upper() not in ("A", "B"):
+            raise ValueError(f"spec must be 'A' or 'B', got {spec!r}")
         wl = _wl_a if spec.upper() == "A" else _wl_b
         fl = _fl_a if spec.upper() == "A" else _fl_b
         return read_spectrum_region(wl, fl, None, wl_min, wl_max)
@@ -361,6 +370,8 @@ def build_dual_tools(wl_a, fl_a, wl_b, fl_b):
             target_wl: observed wavelength where [O II] is claimed
             search_window: half-width of search window (default 25 Å)
         """
+        if spec.upper() not in ("A", "B"):
+            raise ValueError(f"spec must be 'A' or 'B', got {spec!r}")
         wl = _wl_a if spec.upper() == "A" else _wl_b
         fl = _fl_a if spec.upper() == "A" else _fl_b
         return _detect_oii_core(wl, fl, target_wl, search_window)

@@ -43,7 +43,7 @@ class ResultAuditorAgent(BaseAgent):
         lines.append(f"| Redshift | z = {za:.4f} | z = {zb:.4f} |")
         lines.append(f"| ZWARN | {redrock_a.get('zwarn','?')} | {redrock_b.get('zwarn','?')} |")
         lines.append(f"| SPECTYPE | {redrock_a.get('spectype','?')} | {redrock_b.get('spectype','?')} |")
-        lines.append(f"| DELTACHI2 | {redrock_a.get('chi2',0):.0f} | {redrock_b.get('chi2',0):.0f} |")
+        lines.append(f"| DELTACHI2 | {redrock_a.get('deltachi2',0):.0f} | {redrock_b.get('deltachi2',0):.0f} |")
         lines.append(f"\n|Δz| = {dz:.4f}  (Δv ≈ {dv:.0f} km/s)\n")
 
         lines.append("**Your job: diagnose WHY these two fits disagree.** "

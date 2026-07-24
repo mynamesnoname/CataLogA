@@ -159,7 +159,9 @@ def write_csv(pairs: list[dict], out_path: str):
     """Write pairs to CSV, sorted by |Δz| desc."""
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     fields = ["targetid", "z1", "RedrockType1", "zwarn1", "dchi2_1", "fits1",
-              "z2", "RedrockType2", "zwarn2", "dchi2_2", "fits2", "abs_dz"]
+              "tile1", "night1", "petal1",
+              "z2", "RedrockType2", "zwarn2", "dchi2_2", "fits2",
+              "tile2", "night2", "petal2", "abs_dz"]
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
@@ -234,6 +236,14 @@ def main():
                     pairs[-1][k] = float(pairs[-1][k])
                 for k in ("zwarn1", "zwarn2", "targetid"):
                     pairs[-1][k] = int(pairs[-1][k])
+                if "tile1" not in pairs[-1] or not pairs[-1].get("tile1"):
+                    # Legacy CSV without tile/night/petal columns — recover
+                    # them from the "(tile,night,petal)" fits strings.
+                    for sfx in ("1", "2"):
+                        t, n, p_ = pairs[-1][f"fits{sfx}"].strip("()").split(",")
+                        pairs[-1][f"tile{sfx}"] = t
+                        pairs[-1][f"night{sfx}"] = n
+                        pairs[-1][f"petal{sfx}"] = p_
     else:
         pairs = find_repeat_pairs(args.data_root)
         write_csv(pairs, csv_path)

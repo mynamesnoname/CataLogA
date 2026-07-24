@@ -47,9 +47,30 @@ def _safe_float(val, default=0.0):
         return default
 
 
+async def _stage_retry(coro_factory, *, stage, attempts, log, delay=30.0):
+    """Run one LLM stage, retrying on ANY exception.
+
+    ``coro_factory`` must return a FRESH coroutine on each call (a coroutine
+    cannot be re-awaited after it raises).  Re-raises the last exception
+    after ``attempts`` failures — a failed stage must never silently
+    degrade into downstream stages.
+    """
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return await coro_factory()
+        except Exception as e:
+            last = e
+            log(f"  {stage} attempt {attempt}/{attempts} FAILED: {e}")
+            if attempt < attempts:
+                await asyncio.sleep(delay)
+    raise last
+
+
 def _read_sh_csv(csv_path: str, hypothesis_idx: int, z: float,
                  spectype: str = "?") -> dict:
     """Read an SH line CSV into the dict format FA expects."""
+    from cataloga.tools.lines import LINE_WIDTHS
     if not os.path.exists(csv_path):
         return {
             "hypothesis_idx": hypothesis_idx, "z": z,
@@ -68,13 +89,14 @@ def _read_sh_csv(csv_path: str, hypothesis_idx: int, z: float,
             elif status == "MARGINAL":
                 n_marginal += 1
             name = row.get("name", "?")
+            wclass = LINE_WIDTHS.get(name, LINE_WIDTHS.get(name.replace("_abs", ""), "narrow"))
             line = {
                 "name": name,
                 "rest_wl": _safe_float(row.get("rest_wavelength", 0)),
                 "obs_wl": _safe_float(row.get("predicted_obs", 0)),
                 "status": status,
-                "type": "absorption" if name.endswith("_abs") else "emission",
-                "width_class": "narrow",
+                "type": "absorption" if (name.endswith("_abs") or wclass == "absorption") else "emission",
+                "width_class": wclass,
             }
             fc = row.get("fitted_center", "")
             if fc and fc.strip() and fc.strip() not in ("—", "-", "N/A"):
@@ -98,6 +120,7 @@ def _wrap_fa_catalog(fa_result, *, hypothesis_idx, label, z, spectype,
                      sh_csv_path: str = ""):
     """Wrap FA result in the dict structure HS expects."""
     features = []
+    features_removed = []
     n_keep = n_flag = n_remove = 0
     removed = []
     wl_to_name = {}
@@ -126,7 +149,7 @@ def _wrap_fa_catalog(fa_result, *, hypothesis_idx, label, z, spectype,
                  or fa_result.get("features", []))
         for ln in lines:
             verdict = ln.get("recommendation", ln.get("verdict", ln.get("fa_verdict", "?")))
-            wl = ln.get("wl_obs", ln.get("obs_wl", 0))
+            wl = _safe_float(ln.get("wl_obs", ln.get("obs_wl", 0)))
             name = ln.get("name") or ln.get("claimed_line") or _match_name(wl)
             if verdict == "KEEP":
                 n_keep += 1
@@ -135,6 +158,14 @@ def _wrap_fa_catalog(fa_result, *, hypothesis_idx, label, z, spectype,
             else:
                 n_remove += 1
                 removed.append(name)
+                issues = ln.get("issues")
+                reason = "; ".join(issues) if isinstance(issues, list) else str(issues or "")
+                features_removed.append({
+                    "claimed_line": name,
+                    "wl_obs": wl,
+                    "sh_status": ln.get("status", ln.get("sh_status", "?")),
+                    "reason": reason,
+                })
             features.append({
                 "wl_obs": wl,
                 "feature_type": ln.get("feature_type", ln.get("type", "emission")),
@@ -155,6 +186,7 @@ def _wrap_fa_catalog(fa_result, *, hypothesis_idx, label, z, spectype,
         "features": features,
         "n_keep": n_keep, "n_flag": n_flag, "n_remove": n_remove,
         "removed": removed,
+        "features_removed": features_removed,
         "_raw": str(fa_result)[:10000],
     }
 
@@ -192,7 +224,20 @@ class PipelineRunner:
                               cwt_n_scales=cfg.cwt_n_scales,
                               cwt_min_width=cfg.cwt_min_width,
                               cwt_max_width=cfg.cwt_max_width),
+            return_exceptions=True,
         )
+        for _label, _r in (("A", vi_a), ("B", vi_b)):
+            if isinstance(_r, Exception):
+                log(f"  VI-{_label} FAILED: {_r}")
+        if isinstance(vi_a, Exception) or isinstance(vi_b, Exception):
+            log("  VI stage failed — skipping target (no downstream stages possible)")
+            return {
+                "targetid": tid,
+                "error": "VI stage failed",
+                "vi_a_error": str(vi_a) if isinstance(vi_a, Exception) else None,
+                "vi_b_error": str(vi_b) if isinstance(vi_b, Exception) else None,
+                "elapsed_s": round(time.time() - t0, 1),
+            }
         log(f"  VI-A: {len(vi_a['wl'])} px, {len(vi_a['peaks'])} peaks, {len(vi_a['troughs'])} troughs")
         log(f"  VI-B: {len(vi_b['wl'])} px, {len(vi_b['peaks'])} peaks, {len(vi_b['troughs'])} troughs")
         log(f"  H1 z={vi_a['redrock_a']['z']:.4f} ({vi_a['redrock_a']['spectype']})")
@@ -214,17 +259,32 @@ class PipelineRunner:
         sh = SingleHypothesisAgent(cfg)
 
         log("SH: H1 on coadd-A, H2 on coadd-B (parallel) ...")
+        attempts = getattr(cfg, "stage_retries", 1) + 1
+        retry_delay = getattr(cfg, "stage_retry_delay", 30.0)
+
+        async def _sh_branch(label, vi_x, coadd_path, redrock_key):
+            async def _attempt():
+                result = await sh.run(
+                    redshift=vi_x[redrock_key]["z"],
+                    coadd_path=coadd_path, targetid=tid, label=label,
+                    peaks=vi_x["peaks"], troughs=vi_x["troughs"],
+                    masked_regions=vi_x["masked_regions"],
+                    max_turns=cfg.max_turns_sh)
+                # SH's deliverable is the line catalog; an agent that ends
+                # without writing a non-empty CSV counts as a stage failure.
+                cat = _read_sh_csv(os.path.join(out_dir, f"sh_lines_{label}.csv"),
+                                   hypothesis_idx=0 if label == "H1" else 1,
+                                   z=vi_x[redrock_key]["z"],
+                                   spectype=vi_x[redrock_key]["spectype"])
+                if not cat["lines"]:
+                    raise RuntimeError(f"SH-{label} produced an empty line catalog")
+                return result
+            return await _stage_retry(_attempt, stage=f"SH-{label}",
+                                      attempts=attempts, log=log, delay=retry_delay)
+
         sh_h1, sh_h2 = await asyncio.gather(
-            sh.run(redshift=vi_a["redrock_a"]["z"],
-                   coadd_path=ti.coadd_a, targetid=tid, label="H1",
-                   peaks=vi_a["peaks"], troughs=vi_a["troughs"],
-                   masked_regions=vi_a["masked_regions"],
-                   max_turns=cfg.max_turns_sh),
-            sh.run(redshift=vi_b["redrock_b"]["z"],
-                   coadd_path=ti.coadd_b, targetid=tid, label="H2",
-                   peaks=vi_b["peaks"], troughs=vi_b["troughs"],
-                   masked_regions=vi_b["masked_regions"],
-                   max_turns=cfg.max_turns_sh),
+            _sh_branch("H1", vi_a, ti.coadd_a, "redrock_a"),
+            _sh_branch("H2", vi_b, ti.coadd_b, "redrock_b"),
         )
         log(f"  SH-H1: {_tool_summary(sh_h1)}")
         log(f"  SH-H2: {_tool_summary(sh_h2)}")
@@ -239,6 +299,8 @@ class PipelineRunner:
                                   redshift=z, title=label)
 
         # ── Build FA input from SH CSVs ────────────────────────
+        # SH branches are retried until they produce a non-empty CSV (or
+        # the target fails), so these catalogs are guaranteed non-empty.
         cat_h1 = _read_sh_csv(os.path.join(out_dir, "sh_lines_H1.csv"),
                               hypothesis_idx=0, z=vi_a["redrock_a"]["z"],
                               spectype=vi_a["redrock_a"]["spectype"])
@@ -246,16 +308,22 @@ class PipelineRunner:
                               hypothesis_idx=1, z=vi_b["redrock_b"]["z"],
                               spectype=vi_b["redrock_b"]["spectype"])
 
-        # ── FA × 2 (parallel) ──────────────────────────────────
+        # ── FA × 2 (parallel, per-branch retry) ────────────────
         from cataloga.agents.multi_agents.fa import FeatureAuditorAgent
         fa = FeatureAuditorAgent(cfg)
 
         log("FA: auditing H1 on coadd-A, H2 on coadd-B (parallel) ...")
         fa_h1_result, fa_h2_result = await asyncio.gather(
-            fa.run(ti.coadd_a, tid, cat_h1, wl=vi_a["wl"], fl=vi_a["fl"],
-                   label="H1", max_turns=cfg.max_turns_fa),
-            fa.run(ti.coadd_b, tid, cat_h2, wl=vi_b["wl"], fl=vi_b["fl"],
-                   label="H2", max_turns=cfg.max_turns_fa),
+            _stage_retry(
+                lambda: fa.run(ti.coadd_a, tid, cat_h1,
+                               wl=vi_a["wl"], fl=vi_a["fl"],
+                               label="H1", max_turns=cfg.max_turns_fa),
+                stage="FA-H1", attempts=attempts, log=log, delay=retry_delay),
+            _stage_retry(
+                lambda: fa.run(ti.coadd_b, tid, cat_h2,
+                               wl=vi_b["wl"], fl=vi_b["fl"],
+                               label="H2", max_turns=cfg.max_turns_fa),
+                stage="FA-H2", attempts=attempts, log=log, delay=retry_delay),
         )
         log(f"  FA-H1: {_tool_summary(fa_h1_result)}")
         log(f"  FA-H2: {_tool_summary(fa_h2_result)}")
@@ -274,16 +342,17 @@ class PipelineRunner:
                                  sh_csv_path=os.path.join(out_dir, "sh_lines_H2.csv"))
 
         log("HS: synthesis (dual-spectrum) ...")
-        hs_result = await hs.run(
-            coadd_path_a=ti.coadd_a, coadd_path_b=ti.coadd_b, targetid=tid,
-            redrock_a=vi_a["redrock_a"], redrock_b=vi_b["redrock_b"],
-            fa_catalog_a=fa_h1, fa_catalog_b=fa_h2,
-            wl_a=vi_a["wl"], fl_a=vi_a["fl"],
-            wl_b=vi_b["wl"], fl_b=vi_b["fl"],
-            peaks_a=vi_a["peaks"], troughs_a=vi_a["troughs"],
-            peaks_b=vi_b["peaks"], troughs_b=vi_b["troughs"],
-            max_turns=cfg.max_turns_hs,
-        )
+        hs_result = await _stage_retry(
+            lambda: hs.run(
+                coadd_path_a=ti.coadd_a, coadd_path_b=ti.coadd_b, targetid=tid,
+                redrock_a=vi_a["redrock_a"], redrock_b=vi_b["redrock_b"],
+                fa_catalog_a=fa_h1, fa_catalog_b=fa_h2,
+                wl_a=vi_a["wl"], fl_a=vi_a["fl"],
+                wl_b=vi_b["wl"], fl_b=vi_b["fl"],
+                peaks_a=vi_a["peaks"], troughs_a=vi_a["troughs"],
+                peaks_b=vi_b["peaks"], troughs_b=vi_b["troughs"],
+                max_turns=cfg.max_turns_hs),
+            stage="HS", attempts=attempts, log=log, delay=retry_delay)
         hs_verdict = hs_result.get("result", {})
         if isinstance(hs_verdict, dict):
             log(f"  HS verdict: {hs_verdict.get('verdict', '?')}")
@@ -295,17 +364,18 @@ class PipelineRunner:
         ra = ResultAuditorAgent(cfg)
 
         log("RA: independent review (dual-spectrum) ...")
-        ra_result = await ra.run(
-            coadd_path_a=ti.coadd_a, coadd_path_b=ti.coadd_b, targetid=tid,
-            redrock_a=vi_a["redrock_a"], redrock_b=vi_b["redrock_b"],
-            fa_catalog_a=fa_h1, fa_catalog_b=fa_h2,
-            wl_a=vi_a["wl"], fl_a=vi_a["fl"],
-            wl_b=vi_b["wl"], fl_b=vi_b["fl"],
-            peaks_a=vi_a["peaks"], troughs_a=vi_a["troughs"],
-            peaks_b=vi_b["peaks"], troughs_b=vi_b["troughs"],
-            hs_verdict=hs_verdict if isinstance(hs_verdict, dict) else None,
-            max_turns=cfg.max_turns_ra,
-        )
+        ra_result = await _stage_retry(
+            lambda: ra.run(
+                coadd_path_a=ti.coadd_a, coadd_path_b=ti.coadd_b, targetid=tid,
+                redrock_a=vi_a["redrock_a"], redrock_b=vi_b["redrock_b"],
+                fa_catalog_a=fa_h1, fa_catalog_b=fa_h2,
+                wl_a=vi_a["wl"], fl_a=vi_a["fl"],
+                wl_b=vi_b["wl"], fl_b=vi_b["fl"],
+                peaks_a=vi_a["peaks"], troughs_a=vi_a["troughs"],
+                peaks_b=vi_b["peaks"], troughs_b=vi_b["troughs"],
+                hs_verdict=hs_verdict if isinstance(hs_verdict, dict) else None,
+                max_turns=cfg.max_turns_ra),
+            stage="RA", attempts=attempts, log=log, delay=retry_delay)
         ra_verdict = ra_result.get("result", {})
         if isinstance(ra_verdict, dict):
             log(f"  RA verdict: {ra_verdict.get('verdict', '?')} "

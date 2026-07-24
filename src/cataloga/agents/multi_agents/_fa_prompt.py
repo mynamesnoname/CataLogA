@@ -156,7 +156,7 @@ def build_user_message(
         n_marginal = sum(1 for l in cat.get("lines", [])
                          if l.get("status") == "MARGINAL")
         hyp_lines.append(
-            f"| H{cat['hypothesis_idx']} ({cat['label']}) | z={cat['z']:.4f} | "
+            f"| {cat['label']} | z={cat['z']:.4f} | "
             f"{cat['spectype']} | {n_likely} likely | {n_marginal} marginal | "
             f"{n_tot} total |"
         )
@@ -185,10 +185,10 @@ def build_user_message(
     )
     header = "| λ_obs (Å) |"
     for cat in line_catalogs:
-        header += f" H{cat['hypothesis_idx']} ({cat['label'][:15]}) |"
+        header += f" {cat['label']} |"
     header += " Type |"
     matrix_lines.append(header)
-    sep = "|" + "|".join(["-------"] * (2 + len(line_catalogs))) + "|------|"
+    sep = "|" + "|".join(["-------"] * (2 + len(line_catalogs))) + "|"
     matrix_lines.append(sep)
 
     for wl_key in sorted(matrix.keys()):
@@ -223,12 +223,12 @@ def build_user_message(
         for d in doublets:
             if d["complete"]:
                 doublet_lines.append(
-                    f"- H{d['hypothesis_idx']}: {d['name_a']}@{d['wl_a']} + "
+                    f"- H{d['hypothesis_idx'] + 1}: {d['name_a']}@{d['wl_a']} + "
                     f"{d['name_b']}@{d['wl_b']} → expected ratio {d['ratio_expected']}"
                 )
             else:
                 doublet_lines.append(
-                    f"- H{d['hypothesis_idx']}: {d['name_a']}@{d['wl_a']} → "
+                    f"- H{d['hypothesis_idx'] + 1}: {d['name_a']}@{d['wl_a']} → "
                     f"ORPHAN — missing {d['name_b']}"
                 )
     else:
@@ -240,7 +240,7 @@ def build_user_message(
     if oii_claims:
         for c in oii_claims:
             oii_lines.append(
-                f"- H{c['hypothesis_idx']}: [O II] claimed at {c['wl_obs']:.1f} Å "
+                f"- H{c['hypothesis_idx'] + 1}: [O II] claimed at {c['wl_obs']:.1f} Å "
                 f"(status: {c['status']}). Call `detect_oii_slope_change`."
             )
     else:
@@ -252,7 +252,7 @@ def build_user_message(
     if lya_claims:
         for c in lya_claims:
             lya_lines.append(
-                f"- H{c['hypothesis_idx']}: Lyα claimed at {c['wl_obs']:.1f} Å "
+                f"- H{c['hypothesis_idx'] + 1}: Lyα claimed at {c['wl_obs']:.1f} Å "
                 f"(status: {c['status']}). Check for Lyα forest blueward."
             )
     else:

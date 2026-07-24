@@ -110,7 +110,7 @@ def detect_oii_slope_change(
 
     dip_ratio = dip_deriv / max_deriv if max_deriv > 1e-10 else 1.0
 
-    if dip_deriv < 0:
+    if dip_deriv < 0 and max_deriv > 1e-10:
         detected = True; signature_type = "valley"; recovery_ok = True
     else:
         signature_type = "slope-change"

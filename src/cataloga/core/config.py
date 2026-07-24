@@ -1,11 +1,22 @@
 """Configuration — plain Python (no Pydantic dependency).
 
-Populates from environment variables.
+Populates from environment variables.  Relative paths are anchored at the
+repository root so both absolute and relative forms work from any CWD.
 """
 
 import os
 
 from cataloga.core.llm import resolve_max_tokens
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+
+
+def _resolve_repo_path(p: str) -> str:
+    """Anchor relative paths at the repository root; absolutes pass through."""
+    if not p or os.path.isabs(p):
+        return p
+    return os.path.abspath(os.path.join(_REPO_ROOT, p))
 
 
 class Config:
@@ -34,9 +45,12 @@ class Config:
         self.llm_max_tokens = llm_max_tokens or resolve_max_tokens(self.llm_base_url)
         self.llm_thinking = llm_thinking or os.environ.get("LLM_THINKING", "disabled")
         self.llm_streaming = llm_streaming or os.environ.get("LLM_STREAMING", "").lower() in ("1", "true", "yes")
-        self.data_root = data_root or os.environ.get("DATA_ROOT", ".data/test_catas")
-        self.intermediate_dir = intermediate_dir or os.environ.get("INTERMEDIATE_DIR", "input")
-        self.output_dir = output_dir or os.environ.get("OUTPUT_DIR", "output")
+        self.data_root = _resolve_repo_path(
+            data_root or os.environ.get("DATA_ROOT", ".data/test_catas"))
+        self.intermediate_dir = _resolve_repo_path(
+            intermediate_dir or os.environ.get("INTERMEDIATE_DIR", "input"))
+        self.output_dir = _resolve_repo_path(
+            output_dir or os.environ.get("OUTPUT_DIR", "output"))
         self.targetid = targetid or os.environ.get("TARGETID", "")
         self.dz_threshold = float(os.environ.get("DZ_THRESHOLD", "0.01"))
 

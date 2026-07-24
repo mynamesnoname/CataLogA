@@ -74,8 +74,9 @@ All runtime config comes from `.env` (loaded by both scripts via
   `sh_lines_{H1,H2}.csv` also counts as a stage failure.
 - Paths: `DATA_ROOT` (`.data/test_catas`), `INTERMEDIATE_DIR`,
   `OUTPUT_DIR`, `DZ_THRESHOLD` (0.01). The checked-out `.env` points these
-  at `.data/input` and `.data/output`; the code defaults are `input`/`output`
-  relative to the working directory.
+  at `.data/input` and `.data/output`. Both absolute and relative paths are
+  accepted; relative paths are anchored at the repo root (not the CWD), so
+  the scripts work from any directory.
 
 **Hard-coded path**: `preprocess.py` searches FITS under
 `{DATA_ROOT}/spectro/loa/tiles/cumulative/{TILEID}/{NIGHT}/`. This prefix is

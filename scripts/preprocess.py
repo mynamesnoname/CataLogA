@@ -43,6 +43,17 @@ INTERMEDIATE_DIR = os.environ.get("INTERMEDIATE_DIR", "input")
 DZ_THRESHOLD = float(os.environ.get("DZ_THRESHOLD", "0.01"))
 
 
+def _resolve_path(p: str) -> str:
+    """Resolve *p* to an absolute path.
+
+    Absolute paths pass through unchanged; relative paths are anchored at
+    the repository root (not the CWD), so the scripts work from anywhere.
+    """
+    if os.path.isabs(p):
+        return p
+    return os.path.abspath(os.path.join(PROJECT_ROOT, p))
+
+
 def scan_redrock_files(data_root: str):
     """Walk data_root, yield (tile, night, petal, path) for each redrock FITS."""
     base = os.path.join(data_root, "spectro", "loa", "tiles", "cumulative")
@@ -222,6 +233,9 @@ def main():
     parser.add_argument("--intermediate-dir", default=INTERMEDIATE_DIR)
     parser.add_argument("--dz-threshold", type=float, default=DZ_THRESHOLD)
     args = parser.parse_args()
+    args.data_root = _resolve_path(args.data_root)
+    args.output_dir = _resolve_path(args.output_dir)
+    args.intermediate_dir = _resolve_path(args.intermediate_dir)
 
     csv_path = os.path.join(args.output_dir, "discrepant_pairs.csv")
 

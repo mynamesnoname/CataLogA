@@ -133,11 +133,17 @@ class BaseAgent:
         self._vendor = _detect_vendor(config.llm_base_url)
 
     @property
+    def _model(self) -> str:
+        """This agent's model — per-stage override (LLM_MODEL_SH/FA/HS/RA) if set,
+        else the global ``llm_model``."""
+        return getattr(self.config, f"llm_model_{self.agent_name.lower()}", self.config.llm_model)
+
+    @property
     def llm(self):
         """Simple LLM client (no tools).  Respects ``llm_thinking`` config."""
         if self._llm is None:
             self._llm = create_chat_openai(
-                model=self.config.llm_model,
+                model=self._model,
                 api_key=self.config.llm_api_key,
                 base_url=self.config.llm_base_url,
                 temperature=self.config.llm_temperature,
@@ -151,7 +157,7 @@ class BaseAgent:
         """LLM client for tool-calling agents.  Thinking always disabled."""
         if self._tool_llm is None:
             self._tool_llm = create_chat_openai(
-                model=self.config.llm_model,
+                model=self._model,
                 api_key=self.config.llm_api_key,
                 base_url=self.config.llm_base_url,
                 temperature=self.config.llm_temperature,

@@ -69,6 +69,13 @@ def create_chat_anthropic(
     # passed explicitly, or tool-calling agents that rely on plain-text
     # final answers can silently get back multi-block content instead.
     kwargs["thinking"] = {"type": "adaptive" if thinking == "enabled" else "disabled"}
+    # Auto-cache the last cacheable block on every request (direct Anthropic
+    # API only — not Bedrock/Vertex). In a growing multi-turn tool-calling
+    # loop this caches the entire prefix (tools + skill system prompt + all
+    # prior turns) each time, so every subsequent turn only pays full price
+    # for what's new since the last call — the skill files here run
+    # 6.5K-37K chars and get resent on every ReAct turn without this.
+    kwargs["model_kwargs"] = {"cache_control": {"type": "ephemeral"}}
 
     return ChatAnthropic(**kwargs)
 

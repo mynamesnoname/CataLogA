@@ -30,12 +30,13 @@ python scripts/run_pipeline.py
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `LLM_API_KEY` | *必填* | API 密钥 |
-| `LLM_BASE_URL` | `https://api.deepseek.com` | OpenAI 兼容的 API 地址 |
-| `LLM_MODEL` | `deepseek-v4-pro` | 模型名称 |
-| `LLM_TEMPERATURE` | `0.1` | 采样温度 |
-| `LLM_MAX_TOKENS` | (自动) | 最大输出 token。留空时 DeepSeek 自动设为 65536 |
-| `LLM_THINKING` | `disabled` | 思维链模式。`enabled` 仅在简单 LLM 调用时生效；工具调用模式始终关闭 |
+| `LLM_API_KEY` | *必填* | API 密钥（DeepSeek 或 Anthropic，取决于 `LLM_MODEL`） |
+| `LLM_BASE_URL` | (留空) | 留空 = 官方 API：模型名以 `claude` 开头走 Anthropic 原生 API，否则走 OpenAI 兼容端点。DeepSeek 示例：`https://api.deepseek.com` |
+| `LLM_MODEL` | `claude-opus-5` | 默认模型名称，被下方 `LLM_MODEL_{SH,FA,HS,RA}` 未设置时使用 |
+| `LLM_MODEL_SH` / `LLM_MODEL_FA` / `LLM_MODEL_HS` / `LLM_MODEL_RA` | (留空 = 用 `LLM_MODEL`) | 按 stage 覆盖模型，见下方「成本优化」 |
+| `LLM_TEMPERATURE` | `0.1` | 采样温度。Claude Opus/Sonnet 5 等当前 Anthropic 模型不接受该参数，自动忽略 |
+| `LLM_MAX_TOKENS` | (自动) | 最大输出 token。留空时 DeepSeek 自动设为 65536，Anthropic 模型默认 16000 |
+| `LLM_THINKING` | `disabled` | 思维链模式。`enabled` 仅在简单 LLM 调用时生效；工具调用模式始终显式 `disabled`（Claude Opus 5 若不显式传值默认开启 adaptive thinking，工具调用响应可能变成多 block 而非纯文本） |
 | `LLM_STREAMING` | `false` | ReAct 过程实时输出。`true` 时每轮 LLM 的工具调用和返回都会打印到终端，同时写入 `*_react.md` 日志 |
 
 ### CWT 特征检测
@@ -117,17 +118,21 @@ python scripts/preprocess.py --force   # 强制重新扫描（忽略已有 CSV�
 
 每个 redrock FITS 的 `FIBERMAP` 和 `REDSHIFTS` HDU 被读取，提取 TARGETID、Z、ZWARN、SPECTYPE、DELTACHI2。仅统计 `OBJTYPE='TGT'` 的科学光纤（排除天空光纤）。
 
-### 三步流程
+### 四步流程
 
-**第一步：扫描 → CSV**
+**第一步：扫描 → repeat_pairs.csv**
 
-遍历所有 `redrock-*.fits`，按 TARGETID 交叉匹配。同一 TARGETID 出现在不同 `(tile, night, petal)` 组合中即为重复观测对。计算每对的 |Δz| = |z₁-z₂| / (1 + (z₁+z₂)/2)（mean-normalized 分数红移差，与顺序无关），按从大到小排列，输出到 `{OUTPUT_DIR}/discrepant_pairs.csv`。
+遍历所有 `redrock-*.fits`，按 TARGETID 交叉匹配。同一 TARGETID 出现在不同 `(tile, night, petal)` 组合中即为重复观测对。计算每对的 |Δz| = |z₁-z₂| / (1 + (z₁+z₂)/2)（mean-normalized 分数红移差，与顺序无关），按从大到小排列，输出到 `{OUTPUT_DIR}/repeat_pairs.csv`。**这是全部重复观测对**（绝大多数两次拟合是一致的），不代表都是灾难候选。
 
 CSV 表头：`targetid, z1, RedrockType1, zwarn1, dchi2_1, fits1, z2, RedrockType2, zwarn2, dchi2_2, fits2, abs_dz`。其中 `fits1/fits2` 为 `(tile,night,petal)` 格式的元组。
 
-**第二步：过滤 → Symlink**
+**第二步：筛选 → catastrophic_pairs.csv**
 
-读取 CSV，按 tracer 类型筛选：若任一侧 `RedrockType` 为 `QSO`，用 `|Δz| ≥ DZ_THRESHOLD_QSO`；否则用 `|Δz| ≥ DZ_THRESHOLD_GALAXY`（Redrock 不给出 BGS/LRG/ELG 分类，只能按拟合出的 SPECTYPE 区分）。在 `INTERMEDIATE_DIR` 下为每个合格的 TARGETID 创建子目录，用绝对路径 symlink 指向原始的 coadd 和 redrock FITS：
+从 `repeat_pairs.csv` 中按 tracer 类型筛选灾难候选：若任一侧 `RedrockType` 为 `QSO`，用 `|Δz| ≥ DZ_THRESHOLD_QSO`；否则用 `|Δz| ≥ DZ_THRESHOLD_GALAXY`（Redrock 不给出 BGS/LRG/ELG 分类，只能按拟合出的 SPECTYPE 区分）。结果写入 `{OUTPUT_DIR}/catastrophic_pairs.csv`（与 `repeat_pairs.csv` 同表头）。
+
+**第三步：Symlink**
+
+为 `catastrophic_pairs.csv` 中的每个 TARGETID 在 `INTERMEDIATE_DIR` 下创建子目录，用绝对路径 symlink 指向原始的 coadd 和 redrock FITS：
 
 ```
 {INTERMEDIATE_DIR}/{targetid}/
@@ -139,9 +144,9 @@ CSV 表头：`targetid, z1, RedrockType1, zwarn1, dchi2_1, fits1, z2, RedrockTyp
 
 同时生成 `{INTERMEDIATE_DIR}/targets.txt`：每行一个 TARGETID，按 |Δz| 从大到小排列。
 
-**第三步：报告**
+**第四步：报告**
 
-打印扫描统计：红移文件数、唯一 TARGETID 数、重复观测对总数、ZWARN=0/0 对数量、入选 symlink 数量。
+打印扫描统计：红移文件数、唯一 TARGETID 数、重复观测对总数、ZWARN=0/0 对数量、入选灾难候选数量（按 QSO/galaxy 分类）。
 
 ## 管道运行：run_pipeline.py
 
@@ -180,6 +185,32 @@ SH-H1      SH-H2                    各自在自己的光谱上用 fit_peak 验�
 | **FA** (FeatureAuditor) | 独立审计每条 claim 是否为真实光谱特征 | `read_spectrum_region`, `grep_kb` |
 | **HS** (HypothesisSynthesis) | 综合比较两条 FA 结果，判定偏好哪个红移 | `read_spec(spec)`, `grep_kb` |
 | **RA** (ResultAuditor) | 独立诊断灾难成因（天空线混淆 / 模板错配 / 噪声过拟合等） | `read_spec(spec)`, `grep_kb` |
+
+### 成本优化
+
+单目标全流程（VI → SH×2 → FA×2 → HS → RA）在纯 Claude Opus 5 下约 $3-5，两项优化叠加后可降到约 $1.5-2：
+
+1. **Prompt caching**（`core/llm.py: create_chat_anthropic`）— 每次 Anthropic 请求自动带上
+   `cache_control: {"type": "ephemeral"}`，缓存到目前为止的整个前缀（skill 系统提示 + 工具定义 +
+   历史对话）。SH/FA/HS/RA 都是多轮 ReAct 工具调用循环，同一份 skill 文本（FA_skill.md 达 37K
+   字符）不缓存的话每轮都要全价重发。实测单目标节省约 35-40%。
+2. **按 stage 分层模型**（`LLM_MODEL_SH`/`LLM_MODEL_FA`/`LLM_MODEL_HS`/`LLM_MODEL_RA`）—
+   SH/FA 是规则化的工具调用任务（逐条验证/审计谱线，判据已写在 skill 里），HS/RA 是开放式综合
+   判断和成因诊断（HS 明确不打分排序，RA 要重建物理机制）。SH/FA 用 Sonnet 5，HS/RA 保持 Opus 5，
+   在 caching 基础上再省约 40%。
+
+   **A/B 验证**（4 个目标，配对对照）：3/4 target verdict 完全不变；唯一变化的 1 个（QSO/QSO 简并
+   案例）在纯 Opus 5 下 HS/RA 本就意见分裂（`PREFER_H2` vs `INDETERMINATE`），换用 Sonnet 5 后
+   两者转为一致的 `INDETERMINATE` —— 是让分裂判决收敛，而非推翻一个确定的正确答案。已知答案的
+   flagship 案例（`39628250216924756`，文档标注正确答案 `PREFER_H2`）在两种配置下都给出正确判决。
+
+流水线运行结束会打印每个目标的 token 用量和实际花费（按各 stage 实际使用的模型分别计价，非固定
+按 Opus 5 计价）：
+
+```
+Tokens: 48 input, 292043 cache-write, 469140 cache-read, 40576 output
+Est. cost: $1.94 (vs $3.20 without caching, 39% saved)
+```
 
 ### 输出结构
 

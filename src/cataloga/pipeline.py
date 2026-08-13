@@ -27,6 +27,52 @@ from cataloga.harness.tools import build_tools, build_dual_tools
 logger = logging.getLogger(__name__)
 
 
+# Claude pricing, $/MTok (input, cache write 5m = 1.25x input, cache read = 0.1x
+# input, output). Sonnet 5 uses introductory pricing (through 2026-08-31).
+_MODEL_PRICE = {
+    "claude-opus-5":   {"input": 5.0, "cache_write": 6.25, "cache_read": 0.50, "output": 25.0},
+    "claude-sonnet-5": {"input": 2.0, "cache_write": 2.50, "cache_read": 0.20, "output": 10.0},
+    "claude-haiku-4-5":{"input": 1.0, "cache_write": 1.25, "cache_read": 0.10, "output": 5.0},
+}
+_DEFAULT_PRICE = _MODEL_PRICE["claude-opus-5"]
+
+
+def _usage_summary(stage_results: dict) -> dict:
+    """Aggregate token usage + estimated cost across all LLM stages for one target.
+
+    Each message is priced by the model that actually generated it
+    (``response_metadata["model"]``), so mixed-model-tier runs (e.g. Sonnet 5
+    for SH/FA, Opus 5 for HS/RA) are costed correctly rather than assuming a
+    single model for everything.
+    """
+    totals = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+    cost = 0.0
+    cost_no_cache = 0.0
+    for result in stage_results.values():
+        for msg in result.get("messages", []) if isinstance(result, dict) else []:
+            meta = getattr(msg, "response_metadata", {})
+            usage = meta.get("usage", {})
+            if not usage:
+                continue
+            price = _MODEL_PRICE.get(meta.get("model", ""), _DEFAULT_PRICE)
+            tok = {
+                "input": usage.get("input_tokens", 0) or 0,
+                "cache_write": usage.get("cache_creation_input_tokens", 0) or 0,
+                "cache_read": usage.get("cache_read_input_tokens", 0) or 0,
+                "output": usage.get("output_tokens", 0) or 0,
+            }
+            for k, v in tok.items():
+                totals[k] += v
+            cost += sum(tok[k] / 1e6 * price[k] for k in tok)
+            # What these same tokens would have cost with no caching at all
+            # (cache-written/cache-read tokens billed as plain input instead).
+            cost_no_cache += (
+                (tok["input"] + tok["cache_write"] + tok["cache_read"]) / 1e6 * price["input"]
+                + tok["output"] / 1e6 * price["output"]
+            )
+    return {**totals, "cost_usd": cost, "cost_no_cache_usd": cost_no_cache}
+
+
 def _tool_summary(result: dict) -> str:
     tools = result.get("tool_results", [])
     if not tools:
@@ -381,6 +427,17 @@ class PipelineRunner:
             log(f"  RA verdict: {ra_verdict.get('verdict', '?')} "
                 f"({ra_verdict.get('calibrated_confidence', '?')})")
 
+        usage = _usage_summary({
+            "sh_h1": sh_h1, "sh_h2": sh_h2,
+            "fa_h1": fa_h1_result, "fa_h2": fa_h2_result,
+            "hs": hs_result, "ra": ra_result,
+        })
+        log(f"  Tokens: {usage['input']} input, {usage['cache_write']} cache-write, "
+            f"{usage['cache_read']} cache-read, {usage['output']} output")
+        log(f"  Est. cost: ${usage['cost_usd']:.2f} "
+            f"(vs ${usage['cost_no_cache_usd']:.2f} without caching, "
+            f"{100*(1 - usage['cost_usd']/max(usage['cost_no_cache_usd'], 1e-9)):.0f}% saved)")
+
         elapsed = time.time() - t0
         log(f"\nPipeline done in {elapsed:.0f}s")
         log(f"Output: {cfg.output_dir}/{tid}/")
@@ -393,4 +450,5 @@ class PipelineRunner:
             "fa_h1": fa_h1_result, "fa_h2": fa_h2_result,
             "hs": hs_result, "ra": ra_result,
             "elapsed_s": round(elapsed, 1),
+            "usage": usage,
         }

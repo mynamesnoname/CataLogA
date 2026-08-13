@@ -34,7 +34,8 @@ class ResultAuditorAgent(BaseAgent):
         # ── The catastrophe ──
         za = redrock_a.get('z', 0); zb = redrock_b.get('z', 0)
         dz = abs(za - zb)
-        dv = 299792.458 * dz / (1 + min(za, zb))
+        # Mean-normalized (order-independent), consistent with preprocess.py's abs_dz
+        dv = 299792.458 * dz / (1 + (za + zb) / 2)
         lines.append(f"## Redshift Catastrophe: TARGETID {targetid}\n")
         lines.append(f"This target was observed TWICE. The two redrock fits disagree catastrophically:\n")
         lines.append(f"|  | Observation A | Observation B |")

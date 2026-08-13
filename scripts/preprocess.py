@@ -1,17 +1,21 @@
 #!/usr/bin/env python
 """Preprocess DESI repeat-observation data for CataLogA.
 
-Three steps:
+Four steps:
 
 1. Scan ``DATA_ROOT`` for all redrock FITS, find TARGETIDs appearing
-   in multiple observations, compute |Δz| for each pair, output CSV.
-2. Filter by ``DZ_THRESHOLD``, create symlinks in ``INTERMEDIATE_DIR``.
-3. Write ``targets.txt`` listing all TARGETIDs sorted by |Δz| desc.
+   in multiple observations, compute |Δz| for each pair, output
+   ``repeat_pairs.csv`` — EVERY repeat-observation pair found, agreeing
+   or not (most agree; this is not a catastrophe list).
+2. Select the candidate catastrophes from that table by the
+   tracer-dependent |Δz| threshold, output ``catastrophic_pairs.csv``.
+3. Create symlinks in ``INTERMEDIATE_DIR`` for each catastrophic pair.
+4. Write ``targets.txt`` listing those TARGETIDs sorted by |Δz| desc.
 
 Usage::
 
     python scripts/preprocess.py
-    python scripts/preprocess.py --force   # regenerate CSV even if exists
+    python scripts/preprocess.py --force   # regenerate repeat_pairs.csv even if exists
 
 Environment (.env):
     DATA_ROOT, INTERMEDIATE_DIR, OUTPUT_DIR, DZ_THRESHOLD_QSO, DZ_THRESHOLD_GALAXY
@@ -186,13 +190,16 @@ def find_repeat_pairs(data_root: str) -> list[dict]:
     return pairs
 
 
-def write_csv(pairs: list[dict], out_path: str):
+C_KM_S = 299792.458  # speed of light, km/s
+
+
+def write_csv(pairs: list[dict], out_path: str, extra_fields: list[str] = None):
     """Write pairs to CSV, sorted by |Δz| desc."""
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     fields = ["targetid", "z1", "RedrockType1", "zwarn1", "dchi2_1", "fits1",
               "tile1", "night1", "petal1",
               "z2", "RedrockType2", "zwarn2", "dchi2_2", "fits2",
-              "tile2", "night2", "petal2", "abs_dz"]
+              "tile2", "night2", "petal2", "abs_dz"] + (extra_fields or [])
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
@@ -202,13 +209,11 @@ def write_csv(pairs: list[dict], out_path: str):
     print(f"  CSV: {len(pairs)} pairs → {out_path}")
 
 
-def create_symlinks(pairs: list[dict], data_root: str, intermediate_dir: str,
-                    dz_threshold_qso: float, dz_threshold_galaxy: float):
-    """Create symlinks for pairs with |Δz| >= the tracer-appropriate threshold."""
-    base = os.path.join(data_root, "spectro", "loa", "tiles", "cumulative")
-    os.makedirs(intermediate_dir, exist_ok=True)
-
-    targetids = []
+def select_catastrophic_pairs(pairs: list[dict],
+                              dz_threshold_qso: float,
+                              dz_threshold_galaxy: float) -> list[dict]:
+    """Select the candidate-catastrophe subset of *pairs* by tracer-dependent |Δz|."""
+    selected = []
     n_qso = n_galaxy = 0
     for p in pairs:
         is_qso = p["RedrockType1"] == "QSO" or p["RedrockType2"] == "QSO"
@@ -219,6 +224,23 @@ def create_symlinks(pairs: list[dict], data_root: str, intermediate_dir: str,
             n_qso += 1
         else:
             n_galaxy += 1
+        # abs_dz is already the mean-normalized fractional offset, so the
+        # velocity form is a direct scaling — no further (1+z) division.
+        p["dv"] = C_KM_S * p["abs_dz"]
+        selected.append(p)
+    print(f"  Catastrophic: {len(selected)}/{len(pairs)} pairs above threshold "
+          f"({n_qso} QSO @ |Δz|>={dz_threshold_qso}, "
+          f"{n_galaxy} galaxy @ |Δz|>={dz_threshold_galaxy})")
+    return selected
+
+
+def create_symlinks(pairs: list[dict], data_root: str, intermediate_dir: str):
+    """Create symlinks in *intermediate_dir* for each (already-filtered) pair."""
+    base = os.path.join(data_root, "spectro", "loa", "tiles", "cumulative")
+    os.makedirs(intermediate_dir, exist_ok=True)
+
+    targetids = []
+    for p in pairs:
         tid = p["targetid"]
         out_dir = os.path.join(intermediate_dir, str(tid))
         os.makedirs(out_dir, exist_ok=True)
@@ -246,17 +268,13 @@ def create_symlinks(pairs: list[dict], data_root: str, intermediate_dir: str,
         for tid in targetids:
             f.write(f"{tid}\n")
 
-    n_total = len(pairs)
-    n_above = len(targetids)
-    print(f"  Symlinks: {n_above}/{n_total} pairs above threshold "
-          f"({n_qso} QSO @ |Δz|>={dz_threshold_qso}, "
-          f"{n_galaxy} galaxy @ |Δz|>={dz_threshold_galaxy})")
+    print(f"  Symlinks: {len(targetids)} targetids → {intermediate_dir}")
     print(f"  Target list: {txt_path}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="CataLogA preprocessing")
-    parser.add_argument("--force", action="store_true", help="Regenerate CSV")
+    parser.add_argument("--force", action="store_true", help="Regenerate repeat_pairs.csv")
     parser.add_argument("--data-root", default=DATA_ROOT)
     parser.add_argument("--output-dir", default=OUTPUT_DIR)
     parser.add_argument("--intermediate-dir", default=INTERMEDIATE_DIR)
@@ -267,9 +285,9 @@ def main():
     args.output_dir = _resolve_path(args.output_dir)
     args.intermediate_dir = _resolve_path(args.intermediate_dir)
 
-    csv_path = os.path.join(args.output_dir, "discrepant_pairs.csv")
+    csv_path = os.path.join(args.output_dir, "repeat_pairs.csv")
 
-    # Step 1: Scan and build CSV
+    # Step 1: Scan and build the full repeat-pairs table (all pairs, unfiltered)
     if os.path.exists(csv_path) and not args.force:
         print(f"CSV exists, loading: {csv_path}")
         pairs = []
@@ -294,11 +312,16 @@ def main():
 
     total = len(pairs)
     n_both_zero = sum(1 for p in pairs if p["zwarn1"] == 0 and p["zwarn2"] == 0)
-    print(f"\n{total} pairs total, {n_both_zero} with ZWARN=0/0 (strict catastrophes)")
+    print(f"\n{total} repeat pairs total, {n_both_zero} with ZWARN=0/0 (both fits confident)")
 
-    # Step 2: Create symlinks
-    create_symlinks(pairs, args.data_root, args.intermediate_dir,
-                     args.dz_threshold_qso, args.dz_threshold_galaxy)
+    # Step 2: Select candidate catastrophes from the repeat-pairs table
+    catastrophic = select_catastrophic_pairs(
+        pairs, args.dz_threshold_qso, args.dz_threshold_galaxy)
+    write_csv(catastrophic, os.path.join(args.output_dir, "catastrophic_pairs.csv"),
+              extra_fields=["dv"])
+
+    # Step 3: Create symlinks for the selected catastrophic pairs
+    create_symlinks(catastrophic, args.data_root, args.intermediate_dir)
 
     print(f"\nDone. To run the pipeline:")
     print(f"  TARGETID=all python scripts/run_pipeline.py")

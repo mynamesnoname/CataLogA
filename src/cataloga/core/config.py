@@ -39,6 +39,13 @@ class Config:
         self.llm_api_key = llm_api_key or os.environ.get("LLM_API_KEY", "")
         self.llm_base_url = llm_base_url or os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
         self.llm_model = llm_model or os.environ.get("LLM_MODEL", "deepseek-v4-pro")
+        # Per-stage model override (A/B testing mixed model tiers) — each
+        # defaults to LLM_MODEL when unset, so existing single-model setups
+        # are unaffected.
+        self.llm_model_sh = os.environ.get("LLM_MODEL_SH") or self.llm_model
+        self.llm_model_fa = os.environ.get("LLM_MODEL_FA") or self.llm_model
+        self.llm_model_hs = os.environ.get("LLM_MODEL_HS") or self.llm_model
+        self.llm_model_ra = os.environ.get("LLM_MODEL_RA") or self.llm_model
         self.llm_temperature = (
             llm_temperature if llm_temperature is not None
             else float(os.environ.get("LLM_TEMPERATURE", "0.1")))

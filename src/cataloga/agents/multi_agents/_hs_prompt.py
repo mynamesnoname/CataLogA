@@ -171,8 +171,9 @@ def build_user_message(
         )
 
     dz = abs(redrock_a["z"] - redrock_b["z"])
-    z_min = min(redrock_a["z"], redrock_b["z"])
-    dv = dz / (1 + z_min) * 299792.458
+    # Mean-normalized (order-independent), consistent with preprocess.py's abs_dz
+    z_mean = (redrock_a["z"] + redrock_b["z"]) / 2
+    dv = dz / (1 + z_mean) * 299792.458
     both_w0 = (redrock_a.get("zwarn", 1) == 0) and (redrock_b.get("zwarn", 1) == 0)
 
     redrock_table = (

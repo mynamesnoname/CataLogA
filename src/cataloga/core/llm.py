@@ -20,7 +20,13 @@ def _detect_vendor(base_url: str) -> str:
         return "openai"
     if "aliyuncs" in url or "dashscope" in url or "qwen" in url:
         return "qwen"
+    if "anthropic" in url:
+        return "anthropic"
     return "unknown"
+
+
+def _is_anthropic_model(model: str) -> bool:
+    return model.lower().startswith("claude")
 
 
 def _build_thinking_extra_body(mode: str, vendor: str):
@@ -32,6 +38,41 @@ def _build_thinking_extra_body(mode: str, vendor: str):
     return None
 
 
+def create_chat_anthropic(
+    model: str,
+    api_key: str,
+    base_url: str,
+    temperature: float = 0.1,
+    max_tokens: int | None = None,
+    thinking: str = "disabled",
+):
+    """Create a ChatAnthropic instance (native Anthropic API, not OpenAI-compatible)."""
+    try:
+        from langchain_anthropic import ChatAnthropic
+    except ImportError:
+        raise ImportError(
+            "langchain-anthropic not installed.  Install with:\n"
+            "  pip install langchain-anthropic"
+        )
+
+    # Sampling params (temperature/top_p/top_k) are rejected on current-gen
+    # Claude models (Opus 5, Sonnet 5, Opus 4.7+) — omit entirely rather than
+    # pass the OpenAI-style default of 0.1.
+    kwargs = dict(model=model, api_key=api_key)
+    kwargs["max_tokens"] = max_tokens or 16000
+    # Only pass base_url if it actually points at Anthropic's API (or a
+    # compatible proxy) — the DeepSeek default in .env is not valid here.
+    if base_url and "anthropic" in base_url.lower():
+        kwargs["base_url"] = base_url
+    # Claude Opus 5 thinks adaptively BY DEFAULT when `thinking` is omitted
+    # (unlike Opus 4.8, where omission meant off) — so "disabled" must be
+    # passed explicitly, or tool-calling agents that rely on plain-text
+    # final answers can silently get back multi-block content instead.
+    kwargs["thinking"] = {"type": "adaptive" if thinking == "enabled" else "disabled"}
+
+    return ChatAnthropic(**kwargs)
+
+
 def create_chat_openai(
     model: str,
     api_key: str,
@@ -40,11 +81,17 @@ def create_chat_openai(
     max_tokens: int | None = None,
     thinking: str = "disabled",
 ):
-    """Create a ChatOpenAI instance.
+    """Create a chat model instance — ChatAnthropic for Claude models, else ChatOpenAI.
 
-    For DeepSeek, patches ``_get_request_payload`` to keep ``max_tokens``
-    after langchain-openai renames it to ``max_completion_tokens``.
+    For DeepSeek (via ChatOpenAI), patches ``_get_request_payload`` to keep
+    ``max_tokens`` after langchain-openai renames it to ``max_completion_tokens``.
     """
+    if _is_anthropic_model(model) or _detect_vendor(base_url) == "anthropic":
+        return create_chat_anthropic(
+            model=model, api_key=api_key, base_url=base_url,
+            temperature=temperature, max_tokens=max_tokens, thinking=thinking,
+        )
+
     try:
         from langchain_openai import ChatOpenAI
     except ImportError:

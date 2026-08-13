@@ -92,12 +92,24 @@ def _parse_json(raw: str):
 
 
 def _extract_text_from_messages(messages: list) -> str:
-    """Extract the final AI text response from agent message history."""
+    """Extract the final AI text response from agent message history.
+
+    ``content`` is a plain string for OpenAI-compatible models, but for
+    Anthropic models it can be a list of content blocks (e.g. text mixed
+    with thinking/tool_use blocks) — pull the text blocks out in that case.
+    """
     for msg in reversed(messages):
         if getattr(msg, "type", None) == "ai":
             content = getattr(msg, "content", "")
-            if content and isinstance(content, str) and content.strip():
+            if isinstance(content, str) and content.strip():
                 return content
+            if isinstance(content, list):
+                text = "".join(
+                    block.get("text", "") for block in content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                )
+                if text.strip():
+                    return text
     return ""
 
 

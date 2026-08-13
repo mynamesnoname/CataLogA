@@ -64,7 +64,8 @@ python scripts/run_pipeline.py
 | `DATA_ROOT` | `.data/test_catas` | DESI 原始数据根目录。脚本在此目录下按硬编码路径搜索 FITS |
 | `INTERMEDIATE_DIR` | `input` | 中间目录。`preprocess.py` 在此按 TARGETID 创建子目录和 symlink |
 | `OUTPUT_DIR` | `output` | 流水线输出目录。每 TARGETID 一个子目录 |
-| `DZ_THRESHOLD` | `0.01` | 红移差阈值。只有 $\rm{abs}(\Delta z) \geq$ 此值的目标才会生成 symlink |
+| `DZ_THRESHOLD_QSO` | `0.03` | QSO 对（RedrockType 任一侧为 QSO）的红移差阈值，≈ dv 10,000 km/s |
+| `DZ_THRESHOLD_GALAXY` | `0.003` | 星系类对的红移差阈值，≈ dv 1,000 km/s |
 
 ### 运行目标
 
@@ -120,13 +121,13 @@ python scripts/preprocess.py --force   # 强制重新扫描（忽略已有 CSV�
 
 **第一步：扫描 → CSV**
 
-遍历所有 `redrock-*.fits`，按 TARGETID 交叉匹配。同一 TARGETID 出现在不同 `(tile, night, petal)` 组合中即为重复观测对。计算每对的 |Δz|，按从大到小排列，输出到 `{OUTPUT_DIR}/discrepant_pairs.csv`。
+遍历所有 `redrock-*.fits`，按 TARGETID 交叉匹配。同一 TARGETID 出现在不同 `(tile, night, petal)` 组合中即为重复观测对。计算每对的 |Δz| = |z₁-z₂| / (1 + (z₁+z₂)/2)（mean-normalized 分数红移差，与顺序无关），按从大到小排列，输出到 `{OUTPUT_DIR}/discrepant_pairs.csv`。
 
 CSV 表头：`targetid, z1, RedrockType1, zwarn1, dchi2_1, fits1, z2, RedrockType2, zwarn2, dchi2_2, fits2, abs_dz`。其中 `fits1/fits2` 为 `(tile,night,petal)` 格式的元组。
 
 **第二步：过滤 → Symlink**
 
-读取 CSV，筛选 `|Δz| ≥ DZ_THRESHOLD` 的行。在 `INTERMEDIATE_DIR` 下为每个合格的 TARGETID 创建子目录，用绝对路径 symlink 指向原始的 coadd 和 redrock FITS：
+读取 CSV，按 tracer 类型筛选：若任一侧 `RedrockType` 为 `QSO`，用 `|Δz| ≥ DZ_THRESHOLD_QSO`；否则用 `|Δz| ≥ DZ_THRESHOLD_GALAXY`（Redrock 不给出 BGS/LRG/ELG 分类，只能按拟合出的 SPECTYPE 区分）。在 `INTERMEDIATE_DIR` 下为每个合格的 TARGETID 创建子目录，用绝对路径 symlink 指向原始的 coadd 和 redrock FITS：
 
 ```
 {INTERMEDIATE_DIR}/{targetid}/

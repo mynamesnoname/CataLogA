@@ -14,7 +14,13 @@ Usage::
     python scripts/preprocess.py --force   # regenerate CSV even if exists
 
 Environment (.env):
-    DATA_ROOT, INTERMEDIATE_DIR, OUTPUT_DIR, DZ_THRESHOLD
+    DATA_ROOT, INTERMEDIATE_DIR, OUTPUT_DIR, DZ_THRESHOLD_QSO, DZ_THRESHOLD_GALAXY
+
+Catastrophe threshold is tracer-dependent: Redrock doesn't report a target's
+survey class (BGS/LRG/ELG), only its fitted SPECTYPE, so a pair is treated as
+a QSO pair (higher threshold — QSO redshifts are intrinsically less precise)
+if either side's RedrockType is "QSO"; otherwise the tighter galaxy threshold
+applies.
 """
 
 import argparse
@@ -40,7 +46,19 @@ from astropy.io import fits
 DATA_ROOT = os.environ.get("DATA_ROOT", ".data/test_catas")
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 INTERMEDIATE_DIR = os.environ.get("INTERMEDIATE_DIR", "input")
-DZ_THRESHOLD = float(os.environ.get("DZ_THRESHOLD", "0.01"))
+# QSO redshifts are fit from broad lines and are intrinsically less precise
+# than galaxy redshifts (narrow lines) — a higher |Δz| is needed before a QSO
+# pair counts as a genuine catastrophe rather than normal fit scatter.
+# 0.03 ~ 10,000 km/s; 0.003 ~ 1,000 km/s.
+DZ_THRESHOLD_QSO = float(os.environ.get("DZ_THRESHOLD_QSO", "0.03"))
+DZ_THRESHOLD_GALAXY = float(os.environ.get("DZ_THRESHOLD_GALAXY", "0.003"))
+
+
+def _dz_threshold_for_pair(p: dict) -> float:
+    """Tracer-dependent catastrophe threshold for one pair."""
+    if p["RedrockType1"] == "QSO" or p["RedrockType2"] == "QSO":
+        return DZ_THRESHOLD_QSO
+    return DZ_THRESHOLD_GALAXY
 
 
 def _resolve_path(p: str) -> str:
@@ -147,7 +165,9 @@ def find_repeat_pairs(data_root: str) -> list[dict]:
 
                 ri = obs_list[i][4]
                 rj = obs_list[j][4]
-                abs_dz = abs(ri["z"] - rj["z"])
+                # Fractional redshift offset, mean-normalized (order-independent,
+                # unlike normalizing by z_min): |z_A - z_B| / (1 + (z_A + z_B)/2)
+                abs_dz = abs(ri["z"] - rj["z"]) / (1 + (ri["z"] + rj["z"]) / 2)
 
                 pairs.append({
                     "targetid": tid,
@@ -183,15 +203,22 @@ def write_csv(pairs: list[dict], out_path: str):
 
 
 def create_symlinks(pairs: list[dict], data_root: str, intermediate_dir: str,
-                    dz_threshold: float):
-    """Create symlinks for pairs with |Δz| >= dz_threshold."""
+                    dz_threshold_qso: float, dz_threshold_galaxy: float):
+    """Create symlinks for pairs with |Δz| >= the tracer-appropriate threshold."""
     base = os.path.join(data_root, "spectro", "loa", "tiles", "cumulative")
     os.makedirs(intermediate_dir, exist_ok=True)
 
     targetids = []
+    n_qso = n_galaxy = 0
     for p in pairs:
-        if p["abs_dz"] < dz_threshold:
+        is_qso = p["RedrockType1"] == "QSO" or p["RedrockType2"] == "QSO"
+        threshold = dz_threshold_qso if is_qso else dz_threshold_galaxy
+        if p["abs_dz"] < threshold:
             continue
+        if is_qso:
+            n_qso += 1
+        else:
+            n_galaxy += 1
         tid = p["targetid"]
         out_dir = os.path.join(intermediate_dir, str(tid))
         os.makedirs(out_dir, exist_ok=True)
@@ -221,7 +248,9 @@ def create_symlinks(pairs: list[dict], data_root: str, intermediate_dir: str,
 
     n_total = len(pairs)
     n_above = len(targetids)
-    print(f"  Symlinks: {n_above}/{n_total} pairs with |Δz| >= {dz_threshold}")
+    print(f"  Symlinks: {n_above}/{n_total} pairs above threshold "
+          f"({n_qso} QSO @ |Δz|>={dz_threshold_qso}, "
+          f"{n_galaxy} galaxy @ |Δz|>={dz_threshold_galaxy})")
     print(f"  Target list: {txt_path}")
 
 
@@ -231,7 +260,8 @@ def main():
     parser.add_argument("--data-root", default=DATA_ROOT)
     parser.add_argument("--output-dir", default=OUTPUT_DIR)
     parser.add_argument("--intermediate-dir", default=INTERMEDIATE_DIR)
-    parser.add_argument("--dz-threshold", type=float, default=DZ_THRESHOLD)
+    parser.add_argument("--dz-threshold-qso", type=float, default=DZ_THRESHOLD_QSO)
+    parser.add_argument("--dz-threshold-galaxy", type=float, default=DZ_THRESHOLD_GALAXY)
     args = parser.parse_args()
     args.data_root = _resolve_path(args.data_root)
     args.output_dir = _resolve_path(args.output_dir)
@@ -267,7 +297,8 @@ def main():
     print(f"\n{total} pairs total, {n_both_zero} with ZWARN=0/0 (strict catastrophes)")
 
     # Step 2: Create symlinks
-    create_symlinks(pairs, args.data_root, args.intermediate_dir, args.dz_threshold)
+    create_symlinks(pairs, args.data_root, args.intermediate_dir,
+                     args.dz_threshold_qso, args.dz_threshold_galaxy)
 
     print(f"\nDone. To run the pipeline:")
     print(f"  TARGETID=all python scripts/run_pipeline.py")

@@ -10,8 +10,10 @@ PyWavelets>=1.4
 matplotlib>=3.7
 
 # LLM agent infrastructure
+langchain>=0.3                # langchain.agents.create_agent (tool-calling loop)
 langchain-core>=0.3
 langchain-openai>=0.2        # ChatOpenAI for DeepSeek/OpenAI-compatible APIs
+langchain-anthropic>=0.3      # ChatAnthropic for native Claude models
 langgraph>=0.2                # StateGraph workflow (Phase 2+)
 pydantic>=2.0                 # Config validation (Phase 2+)
 

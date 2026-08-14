@@ -98,6 +98,7 @@ First, free-text narrative: describe the catastrophe mechanism, the evidence, an
 {
   "verdict": "PREFER_H1 | PREFER_H2 | INDETERMINATE",
   "confidence": "HIGH | MEDIUM | LOW",
+  "summary": "EXACTLY 2-3 sentences, plain language, no jargon dump. State: which redshift is correct (or why neither can be determined), the catastrophe mechanism in one clause, and the single most decisive piece of evidence. A reader who reads ONLY this field must come away with the right answer and why — write it standalone, not as a teaser for the fields below.",
   "catastrophe_type": "sky_confusion | local_minimum | template_mismatch | noise_overfit | artifact | genuine_astrophysical | unknown",
   "winning_lines": [["Lyα", 4805.6], ["C IV", 6122.4]],
   "losing_lines": [["Ca K", 4825.7], ...],
@@ -110,10 +111,11 @@ First, free-text narrative: describe the catastrophe mechanism, the evidence, an
 
 ### Field definitions
 
+- **`summary`**: The TL;DR — hard-capped at 2-3 sentences. This is the field most readers see first (and possibly only); it must be fully self-contained. Do not exceed the length limit under any circumstance, even for a complex case — compress, don't ramble.
 - **`catastrophe_type`**: Single best diagnosis. See Q2 table above.
 - **`winning_lines`**: Lines you independently confirm as real for the preferred hypothesis.
 - **`losing_lines`**: Lines claimed by the rejected hypothesis that are physically spurious.
-- **`key_evidence`**: 1–2 sentences summarizing the decisive evidence.
-- **`catastrophe_narrative`**: Full narrative explaining what happened and why.
+- **`key_evidence`**: 1–2 sentences summarizing the decisive evidence — a bit more technical/specific than `summary`, but still short. Not a place to restate the full narrative.
+- **`catastrophe_narrative`**: The deep-dive — full reasoning, all evidence considered, for a reader who wants the complete picture. This one may run long; length limits do NOT apply here.
 
 After the JSON block, the output terminates.

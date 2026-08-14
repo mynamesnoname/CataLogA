@@ -74,7 +74,9 @@ Write 5–15 sentences covering:
 {
   "verdict": "PREFER_H1 | PREFER_H2 | INDETERMINATE",
 
-  "narrative": "5-10 sentence summary. Reference specific features by name, wavelength, and measured properties. Explain why one hypothesis is preferred or why neither can be.",
+  "summary": "EXACTLY 2-3 sentences, plain language, no jargon dump. State the verdict, the single most decisive feature/evidence, and (if INDETERMINATE) the specific reason neither hypothesis wins. A reader who reads ONLY this field must come away with the right answer and why — write it standalone, not as a teaser for the narrative below.",
+
+  "narrative": "5-10 sentence summary. Reference specific features by name, wavelength, and measured properties. Explain why one hypothesis is preferred or why neither can be. This is the deep-dive for a reader who wants full detail — the length limit does NOT apply here, only to `summary`.",
 
   "key_findings": [
     "Fact referencing specific features, measurements, and FA verdicts. Be concrete — 'Lyα at 4806Å: FA-KEEP HIGH, S/N=3.8, FWHM=5936 km/s' is better than 'H2 had broad lines.'"

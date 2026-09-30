@@ -18,7 +18,7 @@ import logging
 from pathlib import Path
 
 from cataloga.core.config import Config
-from cataloga.core.llm import create_chat_openai, _detect_vendor
+from cataloga.core.llm import create_chat_openai, _detect_vendor, _is_anthropic_model
 
 # ── Retryable error keywords (aligned with FORMA) ──
 _CONNECTION_KEYWORDS = (
@@ -209,14 +209,21 @@ class BaseAgent:
         max_retries: int = 3,
         retry_delay: int = 30,
         verbose: bool = False,
+        return_raw: bool = False,
     ):
         """Invoke LLM with retry logic and optional JSON parsing.
 
         Set ``verbose=True`` to print the thinking chain (when thinking is
-        enabled in config) to stdout.
+        enabled in config) to stdout. Set ``return_raw=True`` to get back
+        ``(result, response)`` instead of just ``result`` — needed by callers
+        that don't go through ``run_with_tools()`` but still want the raw
+        AIMessage for token-usage accounting (its ``response_metadata``
+        carries ``usage`` and ``model``).
         """
         from langchain_core.messages import SystemMessage, HumanMessage
-        messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+        sys_content = self._wrap_system_message(system_prompt)
+        sys_msg = sys_content if isinstance(sys_content, SystemMessage) else SystemMessage(content=sys_content)
+        messages = [sys_msg, HumanMessage(content=user_prompt)]
 
         for attempt in range(max_retries + 1):
             try:
@@ -235,7 +242,8 @@ class BaseAgent:
                         print(reasoning)
                         print(f"{'='*60}\n[Answer]\n{'='*60}")
 
-                return _parse_json(raw) if parse_json else raw
+                result = _parse_json(raw) if parse_json else raw
+                return (result, response) if return_raw else result
             except Exception as e:
                 msg = str(e).lower()
                 if attempt < max_retries and _is_retryable(msg):
@@ -246,6 +254,26 @@ class BaseAgent:
 
     # ── LangChain agent (tool-calling) ─────────────────────────
 
+    def _wrap_system_message(self, system_prompt: str):
+        """Wrap a system-prompt string with an explicit Anthropic cache
+        breakpoint pinned to the system/skill block itself, when this
+        agent is Anthropic-routed.
+
+        Not the auto "last block" breakpoint (that's keyed to
+        system+first-user-message together, which never matches across
+        parallel H1/H2 branches or across different targets, since their
+        first user message always differs) — this one is stable across
+        every call that shares this skill file. Returns a ``SystemMessage``
+        for Anthropic models, or the plain string unchanged otherwise.
+        """
+        if _is_anthropic_model(self._model) or self._vendor == "anthropic":
+            from langchain_core.messages import SystemMessage
+            return SystemMessage(content=[
+                {"type": "text", "text": system_prompt,
+                 "cache_control": {"type": "ephemeral"}},
+            ])
+        return system_prompt
+
     def _create_agent(self, tools: list, system_prompt: str):
         """Create a LangChain tool-calling agent.
 
@@ -253,6 +281,7 @@ class BaseAgent:
         disabled to avoid reasoning_content passback issues).
         """
         from langchain.agents import create_agent as _create_agent
+        system_prompt = self._wrap_system_message(system_prompt)
         return _create_agent(model=self.tool_llm, tools=tools, system_prompt=system_prompt)
 
     async def run_with_tools(

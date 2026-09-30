@@ -33,7 +33,7 @@ python scripts/run_pipeline.py
 | `LLM_API_KEY` | *必填* | API 密钥（DeepSeek 或 Anthropic，取决于 `LLM_MODEL`） |
 | `LLM_BASE_URL` | (留空) | 留空 = 官方 API：模型名以 `claude` 开头走 Anthropic 原生 API，否则走 OpenAI 兼容端点。DeepSeek 示例：`https://api.deepseek.com` |
 | `LLM_MODEL` | `claude-opus-5` | 默认模型名称，被下方 `LLM_MODEL_{SH,FA,HS,RA}` 未设置时使用 |
-| `LLM_MODEL_SH` / `LLM_MODEL_FA` / `LLM_MODEL_HS` / `LLM_MODEL_RA` | (留空 = 用 `LLM_MODEL`) | 按 stage 覆盖模型，见下方「成本优化」 |
+| `LLM_MODEL_SH` / `LLM_MODEL_FA` / `LLM_MODEL_HS` / `LLM_MODEL_RA` / `LLM_MODEL_RW` | (留空 = 用 `LLM_MODEL`) | 按 stage 覆盖模型，见下方「成本优化」 |
 | `LLM_TEMPERATURE` | `0.1` | 采样温度。Claude Opus/Sonnet 5 等当前 Anthropic 模型不接受该参数，自动忽略 |
 | `LLM_MAX_TOKENS` | (自动) | 最大输出 token。留空时 DeepSeek 自动设为 65536，Anthropic 模型默认 16000 |
 | `LLM_THINKING` | `disabled` | 思维链模式。`enabled` 仅在简单 LLM 调用时生效；工具调用模式始终显式 `disabled`（Claude Opus 5 若不显式传值默认开启 adaptive thinking，工具调用响应可能变成多 block 而非纯文本） |
@@ -174,6 +174,10 @@ SH-H1      SH-H2                    各自在自己的光谱上用 fit_peak 验�
    │         │
   HS          RA                   HS 综合判决；RA 独立诊断灾难成因
 (双光谱)    (双光谱)
+   └────┬────┘
+        │
+       RW                          汇总 SH/FA/HS/RA 全部输出为一份最终报告
+(单次调用，无工具)
 ```
 
 ### 各模块职责
@@ -182,13 +186,16 @@ SH-H1      SH-H2                    各自在自己的光谱上用 fit_peak 验�
 |------|------|----------|
 | **VI** (VisualInterpreter) | 加载 FITS，median-filter CWT 检测特征，Chebyshev 连续谱拟合 | 无（纯数值） |
 | **SH** (SingleHypothesis) | 对单个红移假设验证其预测谱线 | `fit_peak`, `fit_doublet`, `read_spectrum_region`, `compute_redshift`, `write_lines_csv` |
-| **FA** (FeatureAuditor) | 独立审计每条 claim 是否为真实光谱特征 | `read_spectrum_region`, `grep_kb` |
+| **FA** (FeatureAuditor) | 独立审计每条 claim 是否为真实光谱特征 | `read_spectrum_region`, `detect_oii_slope_change`, `grep_kb` |
 | **HS** (HypothesisSynthesis) | 综合比较两条 FA 结果，判定偏好哪个红移 | `read_spec(spec)`, `grep_kb` |
 | **RA** (ResultAuditor) | 独立诊断灾难成因（天空线混淆 / 模板错配 / 噪声过拟合等） | `read_spec(spec)`, `grep_kb` |
+| **RW** (ReportWriter) | 读取 SH/FA/HS/RA 已完成的全部输出，写一份汇总报告 | 无（单次调用，不含工具循环） |
+
+**工具作用域**：`build_tools()`/`build_dual_tools()` 各返回一份共享的完整工具列表（historical reason: SH 需要全部工具），但 FA/HS/RA 各自只应拥有其 skill 文件实际记载的子集——否则 LLM 可能调用未文档化但技术上可用的工具（曾发生：FA 和 HS 都用 `write_report`/`write_lines_csv` 写过意料之外的杂散文件）。`harness/tools.py: scope_tools()` 按函数名过滤，在 `fa.py`/`hs.py`/`ra.py` 中分别应用。
 
 ### 成本优化
 
-单目标全流程（VI → SH×2 → FA×2 → HS → RA）在纯 Claude Opus 5 下约 $3-5，两项优化叠加后可降到约 $1.5-2：
+单目标全流程（VI → SH×2 → FA×2 → HS → RA → RW）在纯 Claude Opus 5 下约 $3-5，两项优化叠加后可降到约 $1.5-2：
 
 1. **Prompt caching**（`core/llm.py: create_chat_anthropic`）— 每次 Anthropic 请求自动带上
    `cache_control: {"type": "ephemeral"}`，缓存到目前为止的整个前缀（skill 系统提示 + 工具定义 +
@@ -203,6 +210,9 @@ SH-H1      SH-H2                    各自在自己的光谱上用 fit_peak 验�
    案例）在纯 Opus 5 下 HS/RA 本就意见分裂（`PREFER_H2` vs `INDETERMINATE`），换用 Sonnet 5 后
    两者转为一致的 `INDETERMINATE` —— 是让分裂判决收敛，而非推翻一个确定的正确答案。已知答案的
    flagship 案例（`39628250216924756`，文档标注正确答案 `PREFER_H2`）在两种配置下都给出正确判决。
+3. **RW 单次调用，不用 ReAct 循环**——RW 只读取 SH/FA/HS/RA 已完成的输出并汇总成一份报告，
+   不需要重新分析光谱，因此不需要工具调用循环。单次调用（无多轮重发）+ Sonnet 5，每个目标
+   仅增加约 $0.05-0.11（现有 ~$1.5-2/target 基础上的 3-6%）。
 
 流水线运行结束会打印每个目标的 token 用量和实际花费（按各 stage 实际使用的模型分别计价，非固定
 按 Opus 5 计价）：
@@ -220,19 +230,19 @@ Est. cost: $1.94 (vs $3.20 without caching, 39% saved)
 ├── cwt_features_B.png              CWT 全局特征 (coadd-B)
 ├── sh_lines_H1.csv                 SH 线表 (H1)
 ├── sh_lines_H2.csv                 SH 线表 (H2)
-├── sh_H1_react.md                  SH ReAct 日志 (H1)
-├── sh_H2_react.md                  SH ReAct 日志 (H2)
+├── sh_H1.md                        SH 报告 (H1)
+├── sh_H2.md                        SH 报告 (H2)
 ├── fa_cleaned_H1.png               经 FA 审计的 H1 谱线图
 ├── fa_cleaned_H2.png               经 FA 审计的 H2 谱线图
-├── fa_H1_react.md                  FA ReAct 日志 (H1)
 ├── fa_H1_verdict.json              FA 审计结果 (H1)
-├── fa_H2_react.md                  FA ReAct 日志 (H2)
 ├── fa_H2_verdict.json              FA 审计结果 (H2)
-├── hs_react.md                     HS ReAct 日志
-├── hs_verdict.json                 HS 判决 (PREFER_H1 / PREFER_H2 / INDETERMINATE)
-├── ra_react.md                     RA ReAct 日志
-└── ra_verdict.json                 RA 诊断 (catastrophe_type + 成因叙述)
+├── hs_verdict.json                 HS 判决 (verdict / summary / narrative / key_findings, PREFER_H1 / PREFER_H2 / INDETERMINATE)
+└── ra_verdict.json                 RA 诊断 (verdict / summary / catastrophe_type / key_evidence / catastrophe_narrative)
+
+{PROJECT_ROOT}/reports/{targetid}.md   RW 汇总报告——整合以上全部输出为一份最终报告
 ```
+
+`LLM_STREAMING=true` 时另有 `*_react.md`（各 stage 的 ReAct 过程日志），默认关闭。
 
 ## 依赖
 

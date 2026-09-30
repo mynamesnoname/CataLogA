@@ -7,8 +7,9 @@ Four steps:
    in multiple observations, compute |Δz| for each pair, output
    ``repeat_pairs.csv`` — EVERY repeat-observation pair found, agreeing
    or not (most agree; this is not a catastrophe list).
-2. Select the candidate catastrophes from that table by the
-   tracer-dependent |Δz| threshold, output ``catastrophic_pairs.csv``.
+2. Select the final scientific sample from that table — tracer-dependent
+   |Δz| threshold AND ZWARN=0/0 (Redrock confident on both exposures, yet
+   they disagree — a "strict catastrophe") — output ``catastrophic_pairs.csv``.
 3. Create symlinks in ``INTERMEDIATE_DIR`` for each catastrophic pair.
 4. Write ``targets.txt`` listing those TARGETIDs sorted by |Δz| desc.
 
@@ -24,7 +25,10 @@ Catastrophe threshold is tracer-dependent: Redrock doesn't report a target's
 survey class (BGS/LRG/ELG), only its fitted SPECTYPE, so a pair is treated as
 a QSO pair (higher threshold — QSO redshifts are intrinsically less precise)
 if either side's RedrockType is "QSO"; otherwise the tighter galaxy threshold
-applies.
+applies. ZWARN=0/0 is required on top of that (matches DESI's own "good
+redshift" quality cut) — a pair failing this is Redrock correctly flagging
+its own uncertainty (most commonly bit 2, SMALL_DELTA_CHI2: a degenerate
+fit), not a confident-but-wrong catastrophe.
 """
 
 import argparse
@@ -56,6 +60,70 @@ INTERMEDIATE_DIR = os.environ.get("INTERMEDIATE_DIR", "input")
 # 0.03 ~ 10,000 km/s; 0.003 ~ 1,000 km/s.
 DZ_THRESHOLD_QSO = float(os.environ.get("DZ_THRESHOLD_QSO", "0.03"))
 DZ_THRESHOLD_GALAXY = float(os.environ.get("DZ_THRESHOLD_GALAXY", "0.003"))
+
+# ── DESI targeting bitmasks (desi_mask / bgs_mask, main survey) ───────────
+# https://github.com/desihub/desitarget/blob/main/py/desitarget/data/targetmask.yaml
+# These are the pre-observation SELECTION class, distinct from SPECTYPE
+# (Redrock's post-fit classification) — a target can carry multiple bits
+# (e.g. selected as both ELG and QSO) since the classes aren't exclusive.
+_DESI_TARGET_LRG = 2**0
+_DESI_TARGET_ELG = 2**1
+_DESI_TARGET_QSO = 2**2
+_DESI_TARGET_BGS_ANY = 2**60
+_BGS_TARGET_FAINT = 2**0
+_BGS_TARGET_BRIGHT = 2**1
+_BGS_TARGET_WISE = 2**2
+_BGS_TARGET_FAINT_HIP = 2**3
+# Lyα QSOs aren't a separate targeting bit — it's the QSO class with a
+# post-hoc redshift cut, conventionally z > 2.1 for the Lyα forest sample.
+_LYA_Z_MIN = 2.1
+
+
+def _decode_tracer(desi_target: int, bgs_target: int, z: float) -> dict:
+    """Decode DESI targeting bitmasks into a tracer classification.
+
+    Returns individual booleans (a target can be multiple classes at once)
+    plus a single priority-ordered ``tracer`` label for convenience:
+    QSO_LYA > QSO > LRG > ELG > BGS > OTHER (OTHER = none of the above bits
+    set, e.g. an MWS/secondary-program target).
+    """
+    is_lrg = bool(desi_target & _DESI_TARGET_LRG)
+    is_elg = bool(desi_target & _DESI_TARGET_ELG)
+    is_qso = bool(desi_target & _DESI_TARGET_QSO)
+    is_bgs = bool(desi_target & _DESI_TARGET_BGS_ANY)
+    is_lya = is_qso and z is not None and z > _LYA_Z_MIN
+
+    bgs_subclass = ""
+    if is_bgs:
+        sub = []
+        if bgs_target & _BGS_TARGET_BRIGHT:
+            sub.append("BRIGHT")
+        if bgs_target & _BGS_TARGET_FAINT:
+            sub.append("FAINT")
+        if bgs_target & _BGS_TARGET_WISE:
+            sub.append("WISE")
+        if bgs_target & _BGS_TARGET_FAINT_HIP:
+            sub.append("FAINT_HIP")
+        bgs_subclass = "+".join(sub)
+
+    if is_lya:
+        tracer = "QSO_LYA"
+    elif is_qso:
+        tracer = "QSO"
+    elif is_lrg:
+        tracer = "LRG"
+    elif is_elg:
+        tracer = "ELG"
+    elif is_bgs:
+        tracer = "BGS"
+    else:
+        tracer = "OTHER"
+
+    return {
+        "tracer": tracer,
+        "is_lrg": is_lrg, "is_elg": is_elg, "is_qso": is_qso,
+        "is_bgs": is_bgs, "is_lya": is_lya, "bgs_subclass": bgs_subclass,
+    }
 
 
 def _dz_threshold_for_pair(p: dict) -> float:
@@ -105,10 +173,12 @@ def read_redrock_targets(fits_path: str) -> dict:
     results = {}
     try:
         with fits.open(fits_path, memmap=True) as hdul:
-            # FIBERMAP has TARGETID, OBJTYPE
+            # FIBERMAP has TARGETID, OBJTYPE, and the targeting bitmasks
             fb = hdul["FIBERMAP"].data
             tids = fb["TARGETID"]
             objtypes = fb["OBJTYPE"]
+            desi_target_arr = fb["DESI_TARGET"]
+            bgs_target_arr = fb["BGS_TARGET"]
 
             # REDSHIFTS has Z, ZERR, ZWARN, SPECTYPE, DELTACHI2
             rz = hdul["REDSHIFTS"].data
@@ -125,12 +195,14 @@ def read_redrock_targets(fits_path: str) -> dict:
                 objtype = objtypes[i].strip() if isinstance(objtypes[i], str) else str(objtypes[i])
                 if objtype != "TGT":
                     continue  # skip sky fibers etc.
+                z = float(z_arr[i])
                 results[tid] = {
-                    "z": float(z_arr[i]),
+                    "z": z,
                     "zerr": float(zerr_arr[i]),
                     "zwarn": int(zwarn_arr[i]),
                     "spectype": sptype_arr[i].strip() if isinstance(sptype_arr[i], str) else str(sptype_arr[i]),
                     "dchi2": float(dchi2_arr[i]),
+                    **_decode_tracer(int(desi_target_arr[i]), int(bgs_target_arr[i]), z),
                 }
     except Exception as e:
         print(f"  [WARN] Failed to read {fits_path}: {e}")
@@ -173,6 +245,13 @@ def find_repeat_pairs(data_root: str) -> list[dict]:
                 # unlike normalizing by z_min): |z_A - z_B| / (1 + (z_A + z_B)/2)
                 abs_dz = abs(ri["z"] - rj["z"]) / (1 + (ri["z"] + rj["z"]) / 2)
 
+                # Targeting class is a property of the TARGET, not the
+                # exposure — it should be identical between repeats. Prefer
+                # the non-"OTHER" side if they ever disagree (e.g. is_lya
+                # depends on the per-exposure fitted z, so it can legitimately
+                # differ between a correct and a catastrophic fit).
+                tracer_row = ri if ri["tracer"] != "OTHER" else rj
+
                 pairs.append({
                     "targetid": tid,
                     "z1": ri["z"], "z2": rj["z"],
@@ -184,6 +263,11 @@ def find_repeat_pairs(data_root: str) -> list[dict]:
                     "abs_dz": abs_dz,
                     "tile1": key_i[0], "night1": key_i[1], "petal1": key_i[2],
                     "tile2": key_j[0], "night2": key_j[1], "petal2": key_j[2],
+                    "tracer": tracer_row["tracer"],
+                    "is_lrg": tracer_row["is_lrg"], "is_elg": tracer_row["is_elg"],
+                    "is_qso": tracer_row["is_qso"], "is_bgs": tracer_row["is_bgs"],
+                    "bgs_subclass": tracer_row["bgs_subclass"],
+                    "is_lya_1": ri["is_lya"], "is_lya_2": rj["is_lya"],
                 })
 
     pairs.sort(key=lambda p: p["abs_dz"], reverse=True)
@@ -199,7 +283,9 @@ def write_csv(pairs: list[dict], out_path: str, extra_fields: list[str] = None):
     fields = ["targetid", "z1", "RedrockType1", "zwarn1", "dchi2_1", "fits1",
               "tile1", "night1", "petal1",
               "z2", "RedrockType2", "zwarn2", "dchi2_2", "fits2",
-              "tile2", "night2", "petal2", "abs_dz"] + (extra_fields or [])
+              "tile2", "night2", "petal2", "abs_dz",
+              "tracer", "is_lrg", "is_elg", "is_qso", "is_bgs", "bgs_subclass",
+              "is_lya_1", "is_lya_2"] + (extra_fields or [])
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
@@ -212,13 +298,27 @@ def write_csv(pairs: list[dict], out_path: str, extra_fields: list[str] = None):
 def select_catastrophic_pairs(pairs: list[dict],
                               dz_threshold_qso: float,
                               dz_threshold_galaxy: float) -> list[dict]:
-    """Select the candidate-catastrophe subset of *pairs* by tracer-dependent |Δz|."""
+    """Select the final scientific sample: tracer-dependent |Δz| AND ZWARN=0/0.
+
+    ZWARN=0 on both sides matches DESI's own "good redshift" quality cut used
+    in BAO/clustering catalogs. Requiring it here restricts the candidate
+    pool to *strict* catastrophes — Redrock was CONFIDENT on both repeat
+    exposures, yet they still disagree — the failure mode that can silently
+    bias downstream cosmology, since nothing in Redrock's own output would
+    flag it. A ZWARN!=0 pair (most commonly bit 2, SMALL_DELTA_CHI2 — the
+    fit is already degenerate) would never enter a science sample anyway, so
+    it isn't a "catastrophe" in the scientifically relevant sense: it's
+    Redrock correctly reporting it wasn't sure.
+    """
     selected = []
-    n_qso = n_galaxy = 0
+    n_qso = n_galaxy = n_zwarn_excluded = 0
     for p in pairs:
         is_qso = p["RedrockType1"] == "QSO" or p["RedrockType2"] == "QSO"
         threshold = dz_threshold_qso if is_qso else dz_threshold_galaxy
         if p["abs_dz"] < threshold:
+            continue
+        if not (p["zwarn1"] == 0 and p["zwarn2"] == 0):
+            n_zwarn_excluded += 1
             continue
         if is_qso:
             n_qso += 1
@@ -228,9 +328,10 @@ def select_catastrophic_pairs(pairs: list[dict],
         # velocity form is a direct scaling — no further (1+z) division.
         p["dv"] = C_KM_S * p["abs_dz"]
         selected.append(p)
-    print(f"  Catastrophic: {len(selected)}/{len(pairs)} pairs above threshold "
+    print(f"  Catastrophic: {len(selected)}/{len(pairs)} pairs above threshold and ZWARN=0/0 "
           f"({n_qso} QSO @ |Δz|>={dz_threshold_qso}, "
-          f"{n_galaxy} galaxy @ |Δz|>={dz_threshold_galaxy})")
+          f"{n_galaxy} galaxy @ |Δz|>={dz_threshold_galaxy}, "
+          f"{n_zwarn_excluded} excluded for ZWARN≠0)")
     return selected
 
 

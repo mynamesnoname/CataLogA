@@ -1,4 +1,4 @@
-"""Pipeline runner — VI_A || VI_B → SH_H1(coadd-A) || SH_H2(coadd-B) → FA → HS → RA.
+"""Pipeline runner — VI_A || VI_B → SH_H1(coadd-A) || SH_H2(coadd-B) → FA → HS → RA → RW.
 
 Each hypothesis is verified on the spectrum that produced it.
 
@@ -111,6 +111,25 @@ async def _stage_retry(coro_factory, *, stage, attempts, log, delay=30.0):
             if attempt < attempts:
                 await asyncio.sleep(delay)
     raise last
+
+
+async def _staggered_pair(coro1, coro2, stagger: float = 5.0):
+    """Run two coroutines concurrently, but delay starting the second by
+    ``stagger`` seconds.
+
+    The H1/H2 branches of a stage (SH, FA) share an identical system prompt
+    (skill file + tool definitions) as their cacheable prefix. Anthropic's
+    prompt cache only becomes readable once the request that wrote it has
+    started being processed — two requests launched at the same instant via
+    a plain ``asyncio.gather`` both land at once and BOTH pay the full
+    cache-write price for that shared prefix, since neither can read what
+    the other is still writing. A short stagger lets the second request
+    read the first one's already-written cache entry instead.
+    """
+    task1 = asyncio.create_task(coro1)
+    await asyncio.sleep(stagger)
+    task2 = asyncio.create_task(coro2)
+    return await asyncio.gather(task1, task2)
 
 
 def _read_sh_csv(csv_path: str, hypothesis_idx: int, z: float,
@@ -328,9 +347,10 @@ class PipelineRunner:
             return await _stage_retry(_attempt, stage=f"SH-{label}",
                                       attempts=attempts, log=log, delay=retry_delay)
 
-        sh_h1, sh_h2 = await asyncio.gather(
+        sh_h1, sh_h2 = await _staggered_pair(
             _sh_branch("H1", vi_a, ti.coadd_a, "redrock_a"),
             _sh_branch("H2", vi_b, ti.coadd_b, "redrock_b"),
+            stagger=cfg.cache_stagger_seconds,
         )
         log(f"  SH-H1: {_tool_summary(sh_h1)}")
         log(f"  SH-H2: {_tool_summary(sh_h2)}")
@@ -359,7 +379,7 @@ class PipelineRunner:
         fa = FeatureAuditorAgent(cfg)
 
         log("FA: auditing H1 on coadd-A, H2 on coadd-B (parallel) ...")
-        fa_h1_result, fa_h2_result = await asyncio.gather(
+        fa_h1_result, fa_h2_result = await _staggered_pair(
             _stage_retry(
                 lambda: fa.run(ti.coadd_a, tid, cat_h1,
                                wl=vi_a["wl"], fl=vi_a["fl"],
@@ -370,6 +390,7 @@ class PipelineRunner:
                                wl=vi_b["wl"], fl=vi_b["fl"],
                                label="H2", max_turns=cfg.max_turns_fa),
                 stage="FA-H2", attempts=attempts, log=log, delay=retry_delay),
+            stagger=cfg.cache_stagger_seconds,
         )
         log(f"  FA-H1: {_tool_summary(fa_h1_result)}")
         log(f"  FA-H2: {_tool_summary(fa_h2_result)}")
@@ -427,10 +448,20 @@ class PipelineRunner:
             log(f"  RA verdict: {ra_verdict.get('verdict', '?')} "
                 f"({ra_verdict.get('calibrated_confidence', '?')})")
 
+        # ── RW: final consolidated report ──────────────────────
+        from cataloga.agents.multi_agents.rw import ReportWriterAgent
+        rw = ReportWriterAgent(cfg)
+
+        log("RW: writing consolidated report ...")
+        rw_result = await _stage_retry(
+            lambda: rw.run(targetid=tid),
+            stage="RW", attempts=attempts, log=log, delay=retry_delay)
+        log(f"  RW: report → {rw_result.get('path', '?')}")
+
         usage = _usage_summary({
             "sh_h1": sh_h1, "sh_h2": sh_h2,
             "fa_h1": fa_h1_result, "fa_h2": fa_h2_result,
-            "hs": hs_result, "ra": ra_result,
+            "hs": hs_result, "ra": ra_result, "rw": rw_result,
         })
         log(f"  Tokens: {usage['input']} input, {usage['cache_write']} cache-write, "
             f"{usage['cache_read']} cache-read, {usage['output']} output")
@@ -448,7 +479,7 @@ class PipelineRunner:
             "vi_b": dict(vi_b, wl=None, fl=None, iv=None, spectrum=None, continuum=None),
             "sh_h1": sh_h1, "sh_h2": sh_h2,
             "fa_h1": fa_h1_result, "fa_h2": fa_h2_result,
-            "hs": hs_result, "ra": ra_result,
+            "hs": hs_result, "ra": ra_result, "rw": rw_result,
             "elapsed_s": round(elapsed, 1),
             "usage": usage,
         }

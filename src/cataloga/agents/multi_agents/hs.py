@@ -10,9 +10,13 @@ import json
 from pathlib import Path
 
 from cataloga.agents.common.base_agent import BaseAgent
-from cataloga.harness.tools import build_dual_tools
+from cataloga.harness.tools import build_dual_tools, scope_tools
 
 SKILL_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "skills"
+
+# HS_synthesis_skill.md only ever documents these two — build_dual_tools()
+# also includes _detect_oii/write_report, which HS must not have.
+_HS_TOOL_NAMES = {"_read_spec", "grep_kb"}
 
 
 class HypothesisSynthesisAgent(BaseAgent):
@@ -34,7 +38,7 @@ class HypothesisSynthesisAgent(BaseAgent):
         stream_path = os.path.join(out_dir, "hs_react.md")
         report_path = os.path.join(out_dir, "hs_verdict.json")
 
-        tools = build_dual_tools(wl_a, fl_a, wl_b, fl_b)
+        tools = scope_tools(build_dual_tools(wl_a, fl_a, wl_b, fl_b), _HS_TOOL_NAMES)
         skill = self.load_skill()
         user_msg = _build(coadd_path_a, coadd_path_b, targetid,
                           redrock_a, redrock_b, fa_catalog_a, fa_catalog_b,

@@ -228,6 +228,19 @@ def read_spectrum_region(wl: np.ndarray, fl: np.ndarray, iv: np.ndarray = None,
     }
 
 
+def scope_tools(tools: list, names: set) -> list:
+    """Restrict a tool list (from build_tools/build_dual_tools) to *names*.
+
+    build_tools()/build_dual_tools() each return a fixed superset shared by
+    multiple agents (e.g. SH and FA both call build_tools()), but only SH is
+    meant to have file-writing tools — an agent whose skill never documents
+    a tool shouldn't have it callable, or it may use it anyway (observed:
+    FA and HS both wrote stray files via write_report/write_lines_csv,
+    despite neither skill mentioning those tools).
+    """
+    return [t for t in tools if getattr(t, "__name__", None) in names]
+
+
 # ---------------------------------------------------------------------------
 # Output tools
 # ---------------------------------------------------------------------------

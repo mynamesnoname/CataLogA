@@ -11,7 +11,11 @@ import json
 from pathlib import Path
 
 from cataloga.agents.common.base_agent import BaseAgent
-from cataloga.harness.tools import build_tools
+from cataloga.harness.tools import build_tools, scope_tools
+
+# FA_skill.md only ever documents these three — build_tools() returns SH's
+# full toolset (incl. write_report/write_lines_csv), which FA must not have.
+_FA_TOOL_NAMES = {"_read_spectrum_region", "_detect_oii_slope_change", "grep_kb"}
 
 SKILL_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "skills"
 
@@ -34,7 +38,7 @@ class FeatureAuditorAgent(BaseAgent):
         stream_path = os.path.join(out_dir, f"fa_{label}_react.md")
         report_path = os.path.join(out_dir, f"fa_{label}_verdict.json")
 
-        tools = build_tools(wl, fl)
+        tools = scope_tools(build_tools(wl, fl), _FA_TOOL_NAMES)
         skill = self.load_skill()
         user_msg = self.build_user_message(coadd_path, targetid, line_catalog)
 

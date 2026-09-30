@@ -10,9 +10,13 @@ import json
 from pathlib import Path
 
 from cataloga.agents.common.base_agent import BaseAgent
-from cataloga.harness.tools import build_dual_tools
+from cataloga.harness.tools import build_dual_tools, scope_tools
 
 SKILL_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "skills"
+
+# RA_skill.md only ever documents these two — build_dual_tools() also
+# includes _detect_oii/write_report, which RA must not have.
+_RA_TOOL_NAMES = {"_read_spec", "grep_kb"}
 
 
 class ResultAuditorAgent(BaseAgent):
@@ -98,7 +102,7 @@ class ResultAuditorAgent(BaseAgent):
         stream_path = os.path.join(out_dir, "ra_react.md")
         report_path = os.path.join(out_dir, "ra_verdict.json")
 
-        tools = build_dual_tools(wl_a, fl_a, wl_b, fl_b)
+        tools = scope_tools(build_dual_tools(wl_a, fl_a, wl_b, fl_b), _RA_TOOL_NAMES)
         skill = self.load_skill()
         user_msg = self.build_user_message(
             coadd_path_a, coadd_path_b, targetid,

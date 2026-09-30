@@ -46,6 +46,7 @@ class Config:
         self.llm_model_fa = os.environ.get("LLM_MODEL_FA") or self.llm_model
         self.llm_model_hs = os.environ.get("LLM_MODEL_HS") or self.llm_model
         self.llm_model_ra = os.environ.get("LLM_MODEL_RA") or self.llm_model
+        self.llm_model_rw = os.environ.get("LLM_MODEL_RW") or self.llm_model
         self.llm_temperature = (
             llm_temperature if llm_temperature is not None
             else float(os.environ.get("LLM_TEMPERATURE", "0.1")))
@@ -78,6 +79,11 @@ class Config:
         self.max_turns_fa = int(os.environ.get("MAX_TURNS_FA", "500"))
         self.max_turns_hs = int(os.environ.get("MAX_TURNS_HS", "500"))
         self.max_turns_ra = int(os.environ.get("MAX_TURNS_RA", "500"))
+
+        # Delay (seconds) before launching the H2 branch of a parallel
+        # SH/FA pair, so it can read H1's prompt-cache write instead of
+        # writing an identical, redundant cache entry of its own.
+        self.cache_stagger_seconds = float(os.environ.get("CACHE_STAGGER_SECONDS", "5.0"))
 
         # ── Stage-level retry for LLM stages (SH/FA/HS/RA) ─────
         # A failed stage is retried up to this many times; if all attempts
